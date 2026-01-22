@@ -86,10 +86,10 @@ data = data |>
 ## Job demands as latent variable
 
 ```{r}
-#Job demands are: workload, pubplication pressure_stress,, publication_pressure_attitude role stressors, work-life balance
+#Job demands are: workload, pubplication pressure_stress, publication_pressure_attitude, role stressors such as ambiguity and conflict, work-life balance
 
 job_demands = data |>
-  select(anonym_id, WLD, PPA, PPS, AMB, CON, WLB)
+  dplyr::select(anonym_id, WLD, PPA, PPS, AMB, CON, WLB)
 
 job_demands_latent = cfa(
   '
@@ -119,7 +119,7 @@ dev.off()
 #Job resources are: opportunities, meaning, influence, social support, pay, tool, and general satisfaction, job insecurity
 
 job_resources = data |>
-  select(anonym_id, OPP, MNG, INF, SOC, PAY, TOL, GNL, PPR, SEC)
+  dplyr::select(anonym_id, OPP, MNG, INF, SOC, PAY, TOL, GNL, PPR, SEC)
 
 job_resources_latent = cfa(
   '
@@ -208,7 +208,7 @@ semTools::compRelSEM(jdr_b_fit)  # if model uses latent variables
 
 ```{r}
 data_normality = data |> 
-  select(burnout:WLB, -open_practice, -qrp_attitude) |>
+  dplyr::select(burnout:WLB, -open_practice, -qrp_attitude) |>
   mutate(across(everything(), ~ as.numeric(.x)))
 
 mvn(data_normality, mvn_test = "mardia", univariate_test = "SW")
@@ -304,7 +304,7 @@ plot(outlier_df$cooks_d, type = "h", main = "Cook's Distance", ylab = "Cook's Di
 
 data_no_outliers <- outlier_df %>% 
   filter(!is_outlier_cooks) %>% 
-  select(-c(cooks_d, is_outlier_cooks))  # remove diagnostics columns
+  dplyr::select(-c(cooks_d, is_outlier_cooks))  # remove diagnostics columns
 
 
 # Refit the model without outliers
@@ -320,51 +320,11 @@ summary(fit_no_outlier, fit.measures = TRUE, standardized = TRUE, modindices = T
 modindices(fit_no_outlier, sort = TRUE)
 ```
 
-# Estimating power for the main SEM model
-
-```{r}
-semPower.getDf(jdr_b_model)
-
-# Power to detect misspecified model
-
-power_model_fit <- semPower(
-  type = "a-priori",
-  effect = 0.05,
-  effect.measure = "RMSEA",
-  alpha = 0.05,
-  df = 120,
-  power = 0.80
-)
-
-summary(power_model_fit)
-
-# Power to detect target effect
-
-inspect(jdr_b_fit, "std.all")
-
-
-# pwrSEM was used with the following parameters:
-## MODEL
-### X =~ x1 + x2 + x3 + x4 + x5 + x6
-### Y =~ y1 + y2 + y3 + y4 + y5 + y6 + y7 + y8 + y9
-### Z ~ Y + X
-
-## PARAMETERS
-### Factor loadings 0.3 (chosen as a conservative estimate based on lowest loading in pilot model (pay_satisfaction = 0.294))
-### Regressions 0.3 and -0.3 (chosen as a conservative estimate based on lowest loading in pilot model (job_resource = -0.382))
-### Variances 0.91 (calculated by pwrSEM)
-## Covariances -0.5 (chosen as a conservative estimate based on lowest covariance in pilot model (job_demands ~~ job_resources = -0.690))
-
-## Result of analysis based on 1100 simulations
-### Effects of interest: burnout ~ job demands, burnout ~ job resources, job demands ~~ job resources
-### Minimum sample size for 0.80 power is 450
-### Lowest power estimation was for burnout ~ job resources (0.80)
-
-```
-
 # Final model
 
 ```{r}
+write.csv(data_no_outliers, here::here("data/processed/data_no_outliers.csv"), row.names = FALSE)
+
 jdr_final_model = '
   # Measurement model
   job_demands =~ WLD + PPA + PPS + AMB + CON + WLB
@@ -377,7 +337,7 @@ jdr_final_model = '
   burnout ~ job_demands + job_resources
   '
 
-jdr_final_fit = sem(jdr_final_model, data = data_no_outliers, std.lv = TRUE, estimator = "MLR", missing = "fiml")
+jdr_final_fit = sem(jdr_final_model, data = data_no_outliers, std.lv = TRUE, estimator = "MLR")
 
 summary(jdr_final_fit, fit.measures = TRUE, standardized = TRUE, modindices = TRUE, rsquare = TRUE)
 modindices(jdr_final_fit, sort = TRUE)
@@ -438,7 +398,7 @@ simulate_power <- function(nobs, alpha = 0.05, n_sim = 500) {
   }, simplify = "matrix")
 }
 
-sample_sizes <- seq(200, 2000, by = 200)
+sample_sizes <- seq(200, 1000, by = 200)
 
 power_results <- tibble(N = integer(), power_job_demands = numeric(), power_job_resources = numeric())
 
@@ -460,4 +420,100 @@ power_results %>%
   arrange(N)
 
 ```
+
+# Estimating power for the main SEM model
+
+```{r}
+semPower.getDf(jdr_b_model)
+
+# Power to detect misspecified model
+
+power_model_fit <- semPower(
+  type = "a-priori",
+  effect = 0.05,
+  effect.measure = "RMSEA",
+  alpha = 0.05,
+  df = 100,
+  power = 0.80
+)
+
+summary(power_model_fit)
+
+# Power to detect target effect
+
+inspect(jdr_b_fit, "std.all")
+
+
+# pwrSEM was used with the following parameters:
+## MODEL
+### X =~ x1 + x2 + x3 + x4 + x5 + x6
+### Y =~ y1 + y2 + y3 + y4 + y5 + y6 
+### Z ~ Y + X
+
+## PARAMETERS
+### Factor loadings are inputed from pilot
+### Regressions are inputed from pilot
+### Variances are inputed from pilot
+## Covariance is inputed from pilot
+
+## Result of analysis based on 1100 simulations
+### Effects of interest: burnout ~ job demands, burnout ~ job resources
+### Minimum sample size for 0.80 power is 450
+### Lowest power estimation was for burnout ~ job resources (0.80)
+
+```
+
+# Testing common method variance
+```{r}
+library(psych)
+all_items = data[, c("burnout",
+              "WLD", "PPA", "PPS", "AMB", "CON", "WLB",
+              "OPP", "MNG", "INF", "SOC", "PAY", "TOL", "PPR", "GNL", "SEC")]
+
+harman_1f <- fa(all_items,
+                nfactors = 1,
+                rotate = "none",
+                fm = "pa")   # principal axis factoring (recommended)
+
+print(harman_1f)
+harman_1f$Vaccounted
+
+
+```
+
+# Including measurement error estimates from McDonald's Omega
+```{r}
+omega_values = read_csv(here::here("analysis/tables/mcdonalds_omega.csv"))
+
+omega_values <- omega_values |>
+  tibble::rownames_to_column("scale") |>
+  dplyr::mutate(
+    scale = dplyr::recode(
+      scale,
+      copsoq_workload = "WLD",
+      ppqr_attitude   = "PPA",
+      ppqr_resources  = "PPR",
+      ppqr_stress     = "PPS",
+      role_ambiguity  = "AMB",
+      role_conflict   = "CON",
+      wlbm            = "WLB",
+      copsoq_opp      = "OPP",
+      copsoq_meaning  = "MNG",
+      copsoq_infl     = "INF",
+      copsoq_soc_sup  = "SOC",
+      jis             = "SEC",
+      bat             = "burnout"
+    )
+  ) %>% 
+  dplyr::select(survey, omega_total)
+
+
+var_values <- apply(
+  data_no_outliers[names(omega_values)],
+  2,
+  var,
+  na.rm = TRUE
+)
+```
+
 
