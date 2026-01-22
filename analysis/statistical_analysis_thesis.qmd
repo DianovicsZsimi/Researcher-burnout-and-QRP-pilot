@@ -1,0 +1,354 @@
+---
+title: "statistical_analysis"
+author: "Dominik Dianovics"
+format: html
+---
+
+# Researcher burnout and questionable research practice pilot data analysis
+
+## Statistical analysis
+
+### Load libraries
+
+```{r echo = FALSE ouput = FALSE}
+library(tidyverse)
+library(here)
+library(ggplot2)
+library(lavaan)
+library(MVN)
+library(jtools)
+library(semPlot)
+library(car)
+library(dunn.test)
+data_path <- here("data")
+```
+
+### Load data
+
+```{r echo = FALSE ouput = FALSE}
+data = read_csv(here::here("data/processed/aggregated_data.csv"))
+```
+
+# Assumptions for the models
+
+## Normality
+```{r}
+data_normality = data |> 
+  select(burnout:work_life_balance) |>
+  mutate(across(everything(), ~ as.numeric(.x)))
+
+mvn(data_normality, mvnTest = "mardia", univariateTest = "SW")
+  
+
+# Use robust ML estimation
+# estimator = "MLM" or "MLMV" or "MLR"
+# se="robust.sem"
+```
+
+# Latent variables as imagined by the Job Demands-Resources Model of Burnout
+
+# Job demands and resources
+
+## Job demands as latent variable
+```{r}
+#Job demands are: workload, pubplication pressure_stress,, publication_pressure_attitude role stressors, work-life balance
+
+job_demands = data |>
+  select(anonym_id, workload, pub_pressure_attitude, pub_pressure_resource, pub_pressure_stress, role_ambiguity, role_conflict, work_life_balance)
+
+job_demands_latent = cfa(
+  '
+  # Measurement model
+  job_demands =~ workload + pub_pressure_attitude + pub_pressure_stress + role_ambiguity + role_conflict + work_life_balance
+  
+  # Residual correlations based on theory and expected overlap
+    role_ambiguity ~~ role_conflict
+  ',
+  data = job_demands,
+  estimator = "MLM",
+  std.lv = TRUE
+)
+summary(job_demands_latent, fit.measures = TRUE, standardized = TRUE, modindices = TRUE)
+
+
+summary_text <- capture.output(summary(job_demands_latent, fit.measures = TRUE, standardized = TRUE, modindices = TRUE))
+writeLines(summary_text, here::here("analysis/tables/job_demands_summary.txt"))
+pdf(here::here("analysis/figures/demands_cfa_plot.pdf"), width = 10, height = 8)
+semPaths(job_demands_latent, what = "std", style = "lisrel", layout = "tree", residuals = TRUE, rotation = 4, sizeMan = 12, sizeMan2 = 6, nCharNodes = 6)
+dev.off()
+
+
+```
+
+## Job resources as latent variable
+```{r}
+#Job resources are: opportunities, meaning, influence, social support, pay, tool, and general satisfaction, job insecurity
+
+job_resources = data |>
+  select(anonym_id, opportunities, meaning, influence, social_support, pay_satisfaction, tool_satisfaction, general_satisfaction, job_security, pub_pressure_resource)
+
+job_resources_latent = cfa(
+  '
+  job_resources =~ opportunities + meaning + influence + social_support + pay_satisfaction + tool_satisfaction + general_satisfaction + job_security + pub_pressure_resource
+  
+  # Residual correlations based on theory and expected overlap
+    meaning ~~ general_satisfaction
+    pay_satisfaction ~~ tool_satisfaction
+  ',
+  data = job_resources,
+  estimator = "MLM",
+  std.lv = TRUE
+)
+summary(job_resources_latent, fit.measures = TRUE, standardized = TRUE, modindices = TRUE)
+modindices(job_resources_latent, sort = TRUE)
+
+summary_text <- capture.output(summary(job_resources_latent, fit.measures = TRUE, standardized = TRUE, modindices = TRUE))
+writeLines(summary_text, here::here("analysis/tables/job_resources_summary.txt"))
+
+pdf(here::here("analysis/figures/resources_cfa_plot.pdf"), width = 10, height = 8)
+semPaths(job_resources_latent, what = "stand", layout = "tree", rotation = 4, sizeMan = 12, sizeMan2 = 6, nCharNodes = 6)
+dev.off()
+```
+
+## Job demands and resources plus burnout: Structural equation modeling
+
+```{r}
+
+renamed_data = data |> 
+  rename(
+    WLD = workload,
+    PPA = pub_pressure_attitude,
+    PPR = pub_pressure_resource,
+    PPS = pub_pressure_stress,
+    AMB = role_ambiguity,
+    CON = role_conflict,
+    WLB = work_life_balance,
+    OPP = opportunities,
+    MNG = meaning,
+    INF = influence,
+    SOC = social_support,
+    PAY = pay_satisfaction,
+    TOL = tool_satisfaction,
+    GNL = general_satisfaction,
+    SEC = job_security
+  )
+
+jdr_b_model = '
+  # Measurement model
+  job_demands =~ WLD + PPA + PPS + AMB + CON + WLB
+  job_resources =~ OPP + MNG + INF + SOC + PAY + TOL + PPR + GNL + SEC
+  
+  # Residual correlations
+  AMB ~~ CON
+  PAY ~~ TOL
+  
+  # Structural model
+  burnout ~ job_demands + job_resources
+'
+
+jdr_b_fit = sem(jdr_b_model, data = renamed_data, std.lv = TRUE, estimator = "MLM", se = "robust.sem")
+
+summary(jdr_b_fit, fit.measures = TRUE, standardized = TRUE, modindices = TRUE)
+modindices(job_resources_latent, sort = TRUE)
+
+summary_text <- capture.output(summary(jdr_b_fit, fit.measures = TRUE, standardized = TRUE, modindices = TRUE))
+writeLines(summary_text, here::here("analysis/tables/jdr_burnout_fit_summary.txt"))
+
+pdf(here::here("analysis/figures/sem_plot.pdf"), width = 10, height = 8)
+semPaths(jdr_b_fit, 
+         what = "stand", 
+         layout = "tree", 
+         rotation = 2,
+         style = "mx",
+         posCol = "black",
+         negCol = "black",
+         nCharNodes = 0,
+         weighted = FALSE,
+         residuals = TRUE,
+         optimizeLatRes = TRUE,
+         fade = FALSE,
+         edge.color = "black",
+         mar = c(3, 5, 3, 5)
+         )
+dev.off()
+```
+
+## Career stage differences
+
+```{r}
+career_stage_data = data |> 
+  filter(title != "This does not apply to me") |> 
+  mutate(title = factor(title, levels = c("PhD student", "Post Doc", "Assistant Professor", "Associate Professor", "Full Professor")))
+
+career_stage_data$title <- factor(career_stage_data$title,
+  levels = c("PhD student", "Post Doc", "Assistant Professor", 
+             "Associate Professor", "Full Professor"),
+  labels = c("PhD\nstudent", "post\ndoc", "assistant\nprofessor",
+             "associate\nprofessor", "full\nprofessor")
+)
+
+# Career stage as grouping variable
+
+kruskal.test(burnout ~ title, data = career_stage_data)
+# Not significant at p < 0.05
+
+kruskal.test(workload ~ title, data = career_stage_data)
+# Not significant at p < 0.05
+
+kruskal.test(job_security ~ title, data = career_stage_data)
+# Significant at p < 0.001
+
+kruskal.test(pub_pressure_stress ~ title, data = career_stage_data)
+# Significant at p < 0.05
+
+kruskal.test(pub_pressure_attitude ~ title, data = career_stage_data)
+# Not significant at p < 0.05
+
+kruskal.test(pub_pressure_resource ~ title, data = career_stage_data)
+# Significant at p < 0.01
+
+kruskal.test(influence ~ title, data = career_stage_data)
+# Significant at p < 0.01
+
+kruskal.test(meaning ~ title, data = career_stage_data)
+# Significant at p < 0.05
+
+kruskal.test(social_support ~ title, data = career_stage_data)
+# Significant at p < 0.05
+
+kruskal.test(opportunities ~ title, data = career_stage_data)
+# Not significant at p < 0.05
+
+kruskal.test(role_ambiguity ~ title, data = career_stage_data)
+# Not significant at p < 0.05
+
+kruskal.test(role_conflict ~ title, data = career_stage_data)
+# Significant at p < 0.05
+
+kruskal.test(work_life_balance ~ title, data = career_stage_data)
+# Not significant at p < 0.05
+
+kruskal.test(pay_satisfaction ~ title, data = career_stage_data)
+# Significant at p < 0.001
+
+kruskal.test(tool_satisfaction ~ title, data = career_stage_data)
+# Not significant at p < 0.05
+
+kruskal.test(general_satisfaction ~ title, data = career_stage_data)
+# Not significant at p < 0.05
+
+# Dunn tests
+
+dunn.test(career_stage_data$pay_satisfaction, career_stage_data$title, method = "bonferroni", alpha = 0.05)
+write.csv(dunn.test(career_stage_data$pay_satisfaction, career_stage_data$title, method = "bonferroni", alpha = 0.05),
+          here::here("analysis/tables/dunn_test_pay_satisfaction.csv"))
+
+pay_satisfaction_median = career_stage_data |> 
+  group_by(title) |>
+  summarize(
+  median = median(pay_satisfaction, na.rm = TRUE)
+  )
+
+dunn.test(career_stage_data$job_security, career_stage_data$title, method = "bonferroni", alpha = 0.05)
+write.csv(dunn.test(career_stage_data$job_security, career_stage_data$title, method = "bonferroni", alpha = 0.05),
+          here::here("analysis/tables/dunn_test_job_security.csv"))
+
+job_security_median = career_stage_data |> 
+  group_by(title) |>
+  summarize(
+  median = median(job_security, na.rm = TRUE)
+  )
+
+dunn.test(career_stage_data$influence, career_stage_data$title, method = "bonferroni", alpha = 0.05)
+write.csv(dunn.test(career_stage_data$influence, career_stage_data$title, method = "bonferroni", alpha = 0.05), 
+          here::here("analysis/tables/dunn_test_influence.csv"))
+
+influence_median = career_stage_data |> 
+  group_by(title) |>
+  summarize(
+  median = median(influence, na.rm = TRUE)
+  )
+
+# Pay satisfaction boxplot
+
+ggplot(career_stage_data, aes(x = title, y = pay_satisfaction)) +
+  geom_boxplot(width = 0.5, outlier.shape = NA) +
+  labs(title = "Figure x", y = "Pay satisfaction", subtitle = "Pay satisfaction by Career Stage") +
+  theme_classic(base_family = "serif") +
+  theme(
+    axis.title.x = element_blank(),
+    plot.title = element_text(size = 12, face = "bold"),
+    plot.subtitle = element_text(size = 12, face = "italic"),
+    axis.text = element_text(size = 12)
+  ) +
+  coord_cartesian(ylim = c(0, 14))
+
+ggsave(here::here("analysis/figures/pay_satisfaction_career_stage.png"), width = 8, height = 6)
+
+# Job security boxplot
+
+ggplot(career_stage_data, aes(x = title, y = job_security)) +
+  stat_boxplot(geom ='errorbar', width = 0.4) +
+  geom_boxplot(width = 0.5, outlier.shape = NA, linewidth = 0.6) +
+  labs(y = "Job security", x = "Career stage") +
+  theme_classic(base_family = "serif") +
+  theme(
+    axis.title.x = element_text(size = 12, face = "bold"),
+    axis.title.y = element_text(size = 12, face = "bold"),
+    axis.text = element_text(size = 12),
+    plot.title = element_blank(),
+    plot.subtitle = element_blank(),
+    axis.line = element_line(color = "black"),
+    axis.ticks = element_line(color = "black"),
+    panel.border = element_blank()
+  ) +
+  coord_cartesian(ylim = c(0, 20))
+ 
+ggsave(here::here("analysis/figures/job_security_career_stage.png"), width = 6.5, height = 4.5, units = "in", dpi = 300)
+
+# Influence boxplot
+
+ggplot(career_stage_data, aes(x = title, y = influence)) +
+  geom_boxplot(width = 0.5, outlier.shape = NA) +
+  labs(title = "Figure x", y = "Influence", subtitle = "Influence by Career Stage") +
+  theme_apa() +
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_text(size = 12),
+    axis.text = element_text(size = 12),
+    plot.title = element_text(size = 12, face = "bold", hjust = 0),
+    plot.subtitle = element_text(size = 12, face = "italic", hjust = 0),
+    axis.line = element_line(color = "black"),
+    axis.ticks = element_line(color = "black"),
+    panel.border = element_blank()
+  ) +
+  coord_cartesian(ylim = c(0, 36))
+
+ggsave(here::here("analysis/figures/influence_career_stage.png"), width = 8, height = 6)
+
+# Burnout boxplot
+
+ggplot(career_stage_data, aes(x = title, y = burnout)) +
+  geom_boxplot(width = 0.5, outlier.shape = NA) +
+  labs(title = "Figure x", y = "Burnout", subtitle = "Burnout by Career Stage") +
+  theme_classic(base_family = "serif") +
+  theme(
+    axis.title.x = element_blank(),
+    plot.title = element_text(size = 12, face = "bold"),
+    plot.subtitle = element_text(size = 12, face = "italic"),
+    axis.text = element_text(size = 12)
+  ) +
+  coord_cartesian(ylim = c(0, 16))
+
+ggsave(here::here("analysis/figures/burnout_career_stage.png"), width = 8, height = 6)
+
+mean_burnout = career_stage_data |> 
+  group_by(title) |> 
+  summarise(mean_burnout = mean(burnout, na.rm = TRUE))
+
+# Career stage as moderator
+
+moderator = lm(burnout ~ title * pay_satisfaction + title * influence + title * job_security, data = career_stage_data)
+summary(moderator)
+```
+
