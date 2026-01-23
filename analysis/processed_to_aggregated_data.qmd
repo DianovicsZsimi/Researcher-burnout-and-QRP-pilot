@@ -13,7 +13,16 @@ format: html
 ```{r}
 library(tidyverse)
 library(here)
+library(purrr)
+library(lavaan)
 library(psych)
+library(mice)
+if (!requireNamespace("naniar", quietly = TRUE)) {
+  install.packages("naniar")
+}
+library(naniar)
+library(semTools)
+
 data_path <- here("data")
 ```
 
@@ -50,8 +59,7 @@ missingness_summary = processed_filtered %>%
   summarise(across(everything(), ~ mean(is.na(.)) * 100)) %>%
   pivot_longer(everything(), names_to = "item", values_to = "missingness_percentage")
 
-library(mice)
-library(naniar)
+
 
 processed_filtered %>%
   dplyr::select(starts_with(c("bat", "ppqr_stress", "ppqr_attitude", "ppqr_resources", "copsoq_workload", "copsoq_soc_sup", "copsoq_oppor", "wlbm", "jis", "copsoq_infl", "copsoq_meaning", "role_ambiguity", "role_conflict"))) %>%
@@ -102,15 +110,13 @@ processed_filtered %>%
 
 ```
 
-# Checking McDonald's omega (Cronbach's alpha alternative)
+# Testing reliability: Checking McDonald's omega (Cronbach's alpha alternative)
 
 ```{r}
 surveys <- c(
   "bat", "ppqr_stress", "ppqr_attitude", "ppqr_resources",
-  "copsoq_workload", "copsoq_soc_sup", "copsoq_oppor", "wlbm", "jis",
-  "qrp_attitude", "copsoq_infl", "copsoq_meaning", "role_ambiguity",
-  "role_conflict", "pay_satisfaction", "tool_satisfaction",
-  "general_satisfaction"
+  "copsoq_workload", "copsoq_soc_sup", "copsoq_oppor", "wlbm", "jis", "copsoq_infl", "copsoq_meaning", "role_ambiguity",
+  "role_conflict"
 )
 
 omega_function <- function(data, survey) {
@@ -136,66 +142,159 @@ for (survey in surveys) {
   omega_results <- rbind(omega_results, omega_result)
 }
 
-write_csv(omega_results, here::here("analysis/tables/mcdonalds_omega.csv"))
+# Second-order factor analyses for each survey
+WLD + PPA + PPS + AMB + CON + WLB
+OPP + MNG + INF + SOC + PPR + SEC
+
+job_demands = c("ppqr_stress", "copsoq_workload", "ppqr_attitude", "role_conflict","role_conflict", "wlbm")
+job_resources = c("ppqr_resources",  "copsoq_soc_sup", "copsoq_oppor", "jis", "copsoq_infl", "copsoq_meaning")
+
+omega()
+
 ```
 
-# Testing reliability, convergent and discriminant validity
+# Testing convergent validity with CFA
 ```{r}
-library(lavaan)
-library(measureQ)
+fit_single_factor_cfa <- function(data, survey_prefix) {
+  
+  items <- names(data)[startsWith(names(data), survey_prefix)]
+  
+  # Safety check
+  if (length(items) < 3) {
+    warning(paste("Survey", survey_prefix, "has fewer than 3 items"))
+    return(NULL)
+  }
+  
+  # Build CFA model string
+  model <- paste0(
+    "factor =~ ",
+    paste(items, collapse = " + ")
+  )
+  
+  fit <- cfa(
+    model,
+    data = data,
+    estimator = "MLR",
+    std.lv = TRUE,
+    missing = "fiml"
+  )
+  
+  list(
+    survey = survey_prefix,
+    fit = fit
+  )
+}
 
-jdr_item_model = '
+cfa_results <- map(
+  surveys,
+  ~ fit_single_factor_cfa(processed_filtered, .x)
+)
+
+# Remove NULLs (if any survey had too few items)
+cfa_results <- compact(cfa_results)
+
+loadings_table <- map_df(
+  cfa_results,
+  function(x) {
+    standardizedSolution(x$fit) |>
+      filter(op == "=~") |>
+      mutate(survey = x$survey) |>
+      dplyr::select(survey, indicator = rhs, loading = est.std)
+  }
+)
+
+compute_ave <- function(fit) {
+  
+  pe <- parameterEstimates(fit)
+  
+  loadings <- pe |>
+    filter(op == "=~")
+  
+  errors <- pe |>
+    filter(op == "~~", lhs == rhs, lhs %in% loadings$rhs)
+  
+  lambda_sq <- loadings$est^2
+  theta     <- errors$est
+  
+  sum(lambda_sq) / (sum(lambda_sq) + sum(theta))
+}
+
+
+ave_table <- map_df(
+  cfa_results,
+  function(x) {
+    tibble(
+      survey = x$survey,
+      AVE = compute_ave(x$fit)
+    )
+  }
+)
+```
+
+# Testing divergent validity
+```{r}
+build_multifactor_cfa <- function(data, surveys) {
+  
+  model_parts <- map(
+    surveys,
+    function(survey) {
+      items <- names(data)[startsWith(names(data), survey)]
+      
+      if (length(items) >= 3) {
+        paste0(survey, " =~ ", paste(items, collapse = " + "))
+      } else {
+        NULL
+      }
+    }
+  )
+  
+  model_parts <- compact(model_parts)
+  
+  paste(model_parts, collapse = "\n")
+}
+
+multi_cfa_model <- build_multifactor_cfa(processed_filtered, surveys)
+
+multi_cfa_fit <- cfa(
+  multi_cfa_model,
+  data = processed_filtered,
+  estimator = "MLR",
+  std.lv = TRUE,
+  missing = "fiml"
+)
+
+latent_correlations <- inspect(multi_cfa_fit, "cor.lv")
+latent_correlations
+
+htmt(multi_cfa_model, processed_filtered)
+
+
+jdr_measurement_model <- '
+  # First-order factors
   WLD =~ copsoq_workload_1 + copsoq_workload_2 + copsoq_workload_3 + copsoq_workload_4
-  PPS =~ ppqr_stress_1 + ppqr_stress_2 + ppqr_stress_3 + ppqr_stress_4 + ppqr_stress_5 + ppqr_stress_6
   PPA =~ ppqr_attitude_7 + ppqr_attitude_8 + ppqr_attitude_9 + ppqr_attitude_10 + ppqr_attitude_11 + ppqr_attitude_12
-  PPR =~ ppqr_resources_13 + ppqr_resources_14 + ppqr_resources_15 + ppqr_resources_16 + ppqr_resources_17 + ppqr_resources_18
+  PPS =~ ppqr_stress_1 + ppqr_stress_2 + ppqr_stress_3 + ppqr_stress_4 + ppqr_stress_5 + ppqr_stress_6
   AMB =~ role_ambiguity_01 + role_ambiguity_02 + role_ambiguity_03 + role_ambiguity_04 + role_ambiguity_05 + role_ambiguity_06
   CON =~ role_conflict_07 + role_conflict_08 + role_conflict_09 + role_conflict_10 + role_conflict_11 + role_conflict_12
   WLB =~ wlbm_1 + wlbm_2 + wlbm_3 + wlbm_4
+
   OPP =~ copsoq_oppor_1 + copsoq_oppor_2 + copsoq_oppor_3
   MNG =~ copsoq_meaning_1 + copsoq_meaning_2
-  INF =~ copsoq_infl_1 + copsoq_infl_2 + copsoq_infl_3 + copsoq_infl_4 + copsoq_infl_5 + copsoq_infl_6
-  SOC =~ copsoq_soc_sup_1 + copsoq_soc_sup_2 + copsoq_soc_sup_3 + copsoq_soc_sup_4 + copsoq_soc_sup_5 + copsoq_soc_sup_6
+  INF =~ copsoq_infl_1 + copsoq_infl_2 + copsoq_infl_3 + copsoq_infl_4
+  SOC =~ copsoq_soc_sup_1 + copsoq_soc_sup_2 + copsoq_soc_sup_3 + copsoq_soc_sup_4
   SEC =~ jis_1 + jis_2 + jis_3 + jis_4
-  burnout =~ bat_1 + bat_2 + bat_3 + bat_4
+  PPR =~ ppqr_resources_13 + ppqr_resources_14 + ppqr_resources_15 + ppqr_resources_16 + ppqr_resources_17 + ppqr_resources_18
+
+  # Second-order factors
   job_demands =~ WLD + PPA + PPS + AMB + CON + WLB
-  job_resources =~ OPP + MNG + INF + SOC + PPR + SEC
-  burnout ~ job_demands + job_resources
-  '
+  job_resources =~ OPP + MNG + INF + SOC + SEC + PPR
+'
 
-jdr_final_fit = sem(jdr_item_model, data = processed_filtered_no_missing, std.lv = TRUE, estimator = "MLR")
+htmt(jdr_measurement_model, processed_filtered)
 
-summary(jdr_final_fit, fit.measures = TRUE, standardized = TRUE, modindices = TRUE, rsquare = TRUE)
 
-manifest_vars <- lavNames(jdr_item_model, type = "ov")
-
-processed_filtered_no_missing <- processed_filtered %>%
-  dplyr::select(all_of(manifest_vars)) %>%
-  drop_na()
-
-measureQ(jdr_item_model, processed_filtered_no_missing, b.no = 500, HTMT = "TRUE")
-
-jdr_test_model = '
-  WLD =~ copsoq_workload_1 + copsoq_workload_2 + copsoq_workload_3 + copsoq_workload_4
-  PPS =~ ppqr_stress_1 + ppqr_stress_2 + ppqr_stress_3 + ppqr_stress_4 + ppqr_stress_5 + ppqr_stress_6
-  PPA =~ ppqr_attitude_7 + ppqr_attitude_8 + ppqr_attitude_9 + ppqr_attitude_10 + ppqr_attitude_11 + ppqr_attitude_12
-  '
-
-measureQ(jdr_test_model, processed_filtered_no_missing, b.no = 500)
-
-Data_A <- read.csv("C:/University/ELTE/Metascience/Psychology of Science/Burnout/pilot_data/researcher_burnout_code/renv/library/windows/R-4.5/x86_64-w64-mingw32/measureQ/extdata/Example_A.csv")
-
-# Specify the model (Model.A) for standardized coefficients
-Model.A <- '
-              EB =~ EB1 + EB2 + EB3 +EB4 + EB5 + EB6 + EB7 + EB8
-              IV =~ IV1 + IV2 + IV3 + IV4 + IV5
-              NVG =~ NVG1 + NVG2 + NVG3
-              NVA =~ NVA1 + NVA2 + NVA3 + NVA4
-             '
-
-# Call the function "measureQ"
-measureQ(Model.A, Data_A, b.no=2000)
 ```
+
 
 # Aggregating data
 

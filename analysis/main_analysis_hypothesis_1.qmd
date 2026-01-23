@@ -168,6 +168,8 @@ jdr_b_fit = sem(jdr_b_model, data = data, std.lv = TRUE, estimator = "MLR", se =
 
 summary(jdr_b_fit, fit.measures = TRUE, standardized = TRUE, modindices = TRUE, rsquare = TRUE)
 modindices(jdr_b_fit, sort = TRUE)
+compRelSEM(jdr_b_fit, higher = c("job_demands", "job_resources"))  # if model uses latent variables
+
 
 summary_text <- capture.output(summary(jdr_b_fit, fit.measures = TRUE, standardized = TRUE, modindices = TRUE))
 writeLines(summary_text, here::here("analysis/tables/jdr_burnout_fit_summary.txt"))
@@ -199,6 +201,64 @@ dev.off()
 ```{r}
 inspect(jdr_b_fit, "std")
 semTools::compRelSEM(jdr_b_fit)  # if model uses latent variables
+
+
+
+```
+# Checking convergent validity
+```{r}
+jdr_measurement_model <- '
+  # First-order factors
+  WLD =~ copsoq_workload_1 + copsoq_workload_2 + copsoq_workload_3 + copsoq_workload_4
+  PPA =~ ppqr_attitude_7 + ppqr_attitude_8 + ppqr_attitude_9 + ppqr_attitude_10 + ppqr_attitude_11 + ppqr_attitude_12
+  PPS =~ ppqr_stress_1 + ppqr_stress_2 + ppqr_stress_3 + ppqr_stress_4 + ppqr_stress_5 + ppqr_stress_6
+  AMB =~ role_ambiguity_01 + role_ambiguity_02 + role_ambiguity_03 + role_ambiguity_04 + role_ambiguity_05 + role_ambiguity_06
+  CON =~ role_conflict_07 + role_conflict_08 + role_conflict_09 + role_conflict_10 + role_conflict_11 + role_conflict_12
+  WLB =~ wlbm_1 + wlbm_2 + wlbm_3 + wlbm_4
+
+  OPP =~ copsoq_oppor_1 + copsoq_oppor_2 + copsoq_oppor_3
+  MNG =~ copsoq_meaning_1 + copsoq_meaning_2
+  INF =~ copsoq_infl_1 + copsoq_infl_2 + copsoq_infl_3 + copsoq_infl_4
+  SOC =~ copsoq_soc_sup_1 + copsoq_soc_sup_2 + copsoq_soc_sup_3 + copsoq_soc_sup_4
+  SEC =~ jis_1 + jis_2 + jis_3 + jis_4
+  PPR =~ ppqr_resources_13 + ppqr_resources_14 + ppqr_resources_15 + ppqr_resources_16 + ppqr_resources_17 + ppqr_resources_18
+
+  # Second-order factors
+  job_demands =~ WLD + PPA + PPS + AMB + CON + WLB
+  job_resources =~ OPP + MNG + INF + SOC + SEC + PPR
+'
+
+jdr_fit <- cfa(
+  jdr_measurement_model,
+  data = processed_filtered,
+  estimator = "MLR",
+  std.lv = TRUE
+)
+
+
+stdsol <- standardizedSolution(jdr_fit)
+
+# Extract second-order loadings for job demands
+load_dem <- subset(stdsol, lhs == "job_demands" & op == "=~")[, "est.std"]
+
+# Extract residual variances of first-order factors
+resid_dem <- subset(stdsol, lhs == "job_demands" & op == "~~" & rhs != lhs)[, "est.std"]
+
+r2_vals <- inspect(jdr_fit, "r2")
+
+resid_dem <- 1 - r2_vals[c("WLD", "PPA", "PPS", "AMB", "CON", "WLB")]
+
+AVE_dem <- sum(load_dem^2) / (sum(load_dem^2) + sum(resid_dem))
+AVE_dem
+
+load_res <- subset(stdsol, lhs == "job_resources" & op == "=~")[, "est.std"]
+resid_res <- 1 - r2_vals[c("OPP", "MNG", "INF", "SOC", "SEC", "PPR")]
+
+AVE_res <- sum(load_res^2) / (sum(load_res^2) + sum(resid_res))
+AVE_res
+
+htmt(jdr_fit)
+
 ```
 
 
@@ -480,40 +540,3 @@ harman_1f$Vaccounted
 
 
 ```
-
-# Including measurement error estimates from McDonald's Omega
-```{r}
-omega_values = read_csv(here::here("analysis/tables/mcdonalds_omega.csv"))
-
-omega_values <- omega_values |>
-  tibble::rownames_to_column("scale") |>
-  dplyr::mutate(
-    scale = dplyr::recode(
-      scale,
-      copsoq_workload = "WLD",
-      ppqr_attitude   = "PPA",
-      ppqr_resources  = "PPR",
-      ppqr_stress     = "PPS",
-      role_ambiguity  = "AMB",
-      role_conflict   = "CON",
-      wlbm            = "WLB",
-      copsoq_opp      = "OPP",
-      copsoq_meaning  = "MNG",
-      copsoq_infl     = "INF",
-      copsoq_soc_sup  = "SOC",
-      jis             = "SEC",
-      bat             = "burnout"
-    )
-  ) %>% 
-  dplyr::select(survey, omega_total)
-
-
-var_values <- apply(
-  data_no_outliers[names(omega_values)],
-  2,
-  var,
-  na.rm = TRUE
-)
-```
-
-
