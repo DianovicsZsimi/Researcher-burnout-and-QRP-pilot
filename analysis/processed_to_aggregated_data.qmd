@@ -14,19 +14,13 @@ format: html
 library(tidyverse)
 library(here)
 library(purrr)
-library(lavaan)
 library(psych)
-library(mice)
-if (!requireNamespace("naniar", quietly = TRUE)) {
-  install.packages("naniar")
-}
 library(naniar)
-library(semTools)
 
 data_path <- here("data")
 ```
 
-## #Loading data
+### Loading data
 
 ```{r}
 processed = read_csv(here::here("data/processed/processed_data.csv"))

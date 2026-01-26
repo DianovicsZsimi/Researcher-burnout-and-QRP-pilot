@@ -4,18 +4,31 @@ author: "Dominik Dianovics"
 format: html
 ---
 
-# Researcher burnout and questionable research practice pilot data preprocessing
+# Researcher burnout and questionable research practice pilot data diagnostic checks
 
 ## Testing reliability, validity, and dimensionality of the used scales
 
-# Testing reliability: Checking McDonald's omega (Cronbach's alpha alternative)
+### Loading packages
 
 ```{r}
-surveys <- c(
-  "bat", "ppqr_stress", "ppqr_attitude", "ppqr_resources",
-  "copsoq_workload", "copsoq_soc_sup", "copsoq_oppor", "wlbm", "jis", "copsoq_infl", "copsoq_meaning", "role_ambiguity",
-  "role_conflict"
-)
+library(tidyverse)
+library(here)
+
+data_path <- here("data")
+```
+
+### Loading data
+
+```{r}
+processed = read_csv(here::here("data/processed/aggregated_data.csv"))
+```
+
+### Testing reliability: Checking McDonald's omega (Cronbach's alpha alternative)
+
+```{r}
+items = c("brt_", "pps_", "ppa_", "ppr_", "wld_", "soc_",
+            "opp_", "wlb_", "jis_", "qrp_", "inf_", "mng_",
+            "rla_", "rlc_", "pay_", "tol_", "gnl_")
 
 omega_function <- function(data, survey) {
   items <- data %>%
