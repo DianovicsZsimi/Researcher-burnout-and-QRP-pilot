@@ -79,7 +79,7 @@ renamed_data <- clean_data %>%
     .cols = starts_with("tool_satisfaction_")
   ) %>% 
   dplyr::rename_with(
-    ~ gsub("^general_satisfaction_", "gen_", .x),
+    ~ gsub("^general_satisfaction_", "gnl_", .x),
     .cols = starts_with("general_satisfaction_")
   )
     
@@ -513,10 +513,10 @@ for (column in tool_satisfaction_columns) {
 
 ```{r}
 general_satisfaction_data = renamed_data |> 
-  select(contains("gen_"), anonym_id)
+  select(contains("gnl"), anonym_id)
 
 general_satisfaction_columns = general_satisfaction_data |>
-  select(contains("gen_")) |>
+  select(contains("gnl")) |>
   colnames()
 
 for (column in general_satisfaction_columns) {

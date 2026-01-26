@@ -4,11 +4,11 @@ author: "Dominik Dianovics"
 format: html
 ---
 
-## Researcher burnout and questionable research practice pilot data cleaning
+# Researcher burnout and questionable research practice pilot data cleaning
 
-### Processed to aggregated data
+## Processed to aggregated data
 
-#Loading packages
+### Loading packages
 
 ```{r}
 library(tidyverse)
@@ -26,302 +26,78 @@ library(semTools)
 data_path <- here("data")
 ```
 
-#Loading data
+## #Loading data
 
 ```{r}
 processed = read_csv(here::here("data/processed/processed_data.csv"))
 ```
 
-### Filtering out invalid data
+### Checking missingness
 
 ```{r}
-processed_filtered = processed %>% 
-  filter(finished == T 
-         & consent == T 
-         & academic_yes_no == T
-         & research_yes_no == T
-         & last_published != "More than 10 years ago or Never"
-         & attention == "Passed"
-  )
-```
+surveys = c("brt", "pps", "ppa", "ppr", "wld", "soc",
+            "opp", "wlb", "jis", "qrp", "inf", "mng",
+            "rla", "rlc", "pay", "tol", "gnl")
 
-# Saving item-level data
-
-```{r}
-write_csv(processed_filtered, here::here("data/processed/item_level_processed.csv"))
-```
-
-# Checking missingness
-
-```{r}
-missingness_summary = processed_filtered %>%
-  dplyr::select(starts_with(c("bat", "ppqr", "copsoq", "wlbm", "jis", "qrp", "role", "pay", "tool", "general", "open_practice"))) %>%
+missingness_summary = processed %>%
+  dplyr::select(starts_with(surveys)) %>%
   summarise(across(everything(), ~ mean(is.na(.)) * 100)) %>%
   pivot_longer(everything(), names_to = "item", values_to = "missingness_percentage")
 
-
-
-processed_filtered %>%
-  dplyr::select(starts_with(c("bat", "ppqr_stress", "ppqr_attitude", "ppqr_resources", "copsoq_workload", "copsoq_soc_sup", "copsoq_oppor", "wlbm", "jis", "copsoq_infl", "copsoq_meaning", "role_ambiguity", "role_conflict"))) %>%
-  naniar::mcar_test()
-
-# Looking at missingness patterns, I assume there has been an error in the survey programming, as the first 29 rows all have no bat_3 and bat_4 responses, after that the same relationship does not appear, thus I reject these cases and rerun the test.
-
-processed_filtered %>%
-  dplyr::select(starts_with(c("bat", "ppqr_stress", "ppqr_attitude", "ppqr_resources", "copsoq_workload", "copsoq_soc_sup", "copsoq_oppor", "wlbm", "jis", "copsoq_infl", "copsoq_meaning", "role_ambiguity", "role_conflict"))) %>%
-  slice(-c(1:8)) %>%
-  rowwise() %>%
+processed %>%
+  dplyr::select(starts_with(surveys)) %>%
   naniar::mcar_test()
 
 # Case-level missingness
-processed_filtered %>%
-  dplyr::select(starts_with(c("bat", "ppqr_stress", "ppqr_attitude", "ppqr_resources", "copsoq_workload", "copsoq_soc_sup", "copsoq_oppor", "wlbm", "jis", "copsoq_infl", "copsoq_meaning", "role_ambiguity", "role_conflict"))) %>%
-  slice(-c(1:8)) %>%
+processed %>%
+  dplyr::select(starts_with(surveys)) %>%
   naniar::miss_case_summary()
 
 # Variable-level missingness
-processed_filtered %>%
-  dplyr::select(starts_with(c("bat", "ppqr_stress", "ppqr_attitude", "ppqr_resources", "copsoq_workload", "copsoq_soc_sup", "copsoq_oppor", "wlbm", "jis", "copsoq_infl", "copsoq_meaning", "role_ambiguity", "role_conflict"))) %>%
-  slice(-c(1:8)) %>%
+processed %>%
+  dplyr::select(starts_with(surveys)) %>%
   naniar::miss_var_summary()
 
-processed_filtered %>%
-  dplyr::select(starts_with(c("bat", "ppqr_stress", "ppqr_attitude", "ppqr_resources", "copsoq_workload", "copsoq_soc_sup", "copsoq_oppor", "wlbm", "jis", "copsoq_infl", "copsoq_meaning", "role_ambiguity", "role_conflict"))) %>%
-  slice(-c(1:8)) %>%
+processed %>%
+  dplyr::select(starts_with(surveys)) %>%
   naniar::gg_miss_var()
 
 # Percentage of people having at least one missing value
 
-processed_filtered %>%
-  dplyr::select(starts_with(c("bat", "ppqr_stress", "ppqr_attitude", "ppqr_resources", "copsoq_workload", "copsoq_soc_sup", "copsoq_oppor", "wlbm", "jis", "copsoq_infl", "copsoq_meaning", "role_ambiguity", "role_conflict"))) %>%
-  slice(-c(1:8)) %>%
+processed %>%
+  dplyr::select(starts_with(surveys)) %>%
   summarise(missing_any = sum(if_any(everything(), is.na)))
 
-# This is the percentage of people having at least one missing value, after removing those with more than 50% missing values (0 individuals) and first 8 rows due to error.
-7 / 243 * 100
+# Looking at missingness patterns, I assume there has been an error in the survey programming, as the first 8 rows all have no brt_3 and brt_4 responses, after that the same relationship does not appear.
+
+# This is the percentage of people having at least one missing value
+
+16 / 251 * 100
 
 # Total missing values
-processed_filtered %>%
-  dplyr::select(starts_with(c("bat", "ppqr_stress", "ppqr_attitude", "ppqr_resources", "copsoq_workload", "copsoq_soc_sup", "copsoq_oppor", "wlbm", "jis", "copsoq_infl", "copsoq_meaning", "role_ambiguity", "role_conflict"))) %>%
-  slice(-c(1:8)) %>%
+processed %>%
+  dplyr::select(starts_with(surveys)) %>%
   summarise(total_missing = sum(is.na(.)),
             total_values = nrow(.) * ncol(.),
             missing_percentage = (total_missing / total_values) * 100)
 
+# Most of the missingness comes from the first 8 individuals and the QRP questions, without them the missingness is very low, 
+# thus I will listwise delete participants with any missing values in the surveys.
+
+processed_filtered = processed %>% 
+  filter(if_all(starts_with(surveys), ~ !is.na(.)))
 ```
 
-# Testing reliability: Checking McDonald's omega (Cronbach's alpha alternative)
+### Aggregating data
 
 ```{r}
-surveys <- c(
-  "bat", "ppqr_stress", "ppqr_attitude", "ppqr_resources",
-  "copsoq_workload", "copsoq_soc_sup", "copsoq_oppor", "wlbm", "jis", "copsoq_infl", "copsoq_meaning", "role_ambiguity",
-  "role_conflict"
-)
-
-omega_function <- function(data, survey) {
-  items <- data %>%
-    dplyr::select(starts_with(survey))
-
-  omega_out <- psych::omega(
-    items,
-    nfactors = 1,
-    plot = FALSE
-  )
-
-  data.frame(
-    survey = survey,
-    omega_total = omega_out$omega.tot
-  )
-}
-
-omega_results <- data.frame()
-
-for (survey in surveys) {
-  omega_result <- omega_function(processed_filtered, survey)
-  omega_results <- rbind(omega_results, omega_result)
-}
-
-# Second-order factor analyses for each survey
-WLD + PPA + PPS + AMB + CON + WLB
-OPP + MNG + INF + SOC + PPR + SEC
-
-job_demands = c("ppqr_stress", "copsoq_workload", "ppqr_attitude", "role_conflict","role_conflict", "wlbm")
-job_resources = c("ppqr_resources",  "copsoq_soc_sup", "copsoq_oppor", "jis", "copsoq_infl", "copsoq_meaning")
-
-omega()
-
-```
-
-# Testing convergent validity with CFA
-```{r}
-fit_single_factor_cfa <- function(data, survey_prefix) {
-  
-  items <- names(data)[startsWith(names(data), survey_prefix)]
-  
-  # Safety check
-  if (length(items) < 3) {
-    warning(paste("Survey", survey_prefix, "has fewer than 3 items"))
-    return(NULL)
-  }
-  
-  # Build CFA model string
-  model <- paste0(
-    "factor =~ ",
-    paste(items, collapse = " + ")
-  )
-  
-  fit <- cfa(
-    model,
-    data = data,
-    estimator = "MLR",
-    std.lv = TRUE,
-    missing = "fiml"
-  )
-  
-  list(
-    survey = survey_prefix,
-    fit = fit
-  )
-}
-
-cfa_results <- map(
-  surveys,
-  ~ fit_single_factor_cfa(processed_filtered, .x)
-)
-
-# Remove NULLs (if any survey had too few items)
-cfa_results <- compact(cfa_results)
-
-loadings_table <- map_df(
-  cfa_results,
-  function(x) {
-    standardizedSolution(x$fit) |>
-      filter(op == "=~") |>
-      mutate(survey = x$survey) |>
-      dplyr::select(survey, indicator = rhs, loading = est.std)
-  }
-)
-
-compute_ave <- function(fit) {
-  
-  pe <- parameterEstimates(fit)
-  
-  loadings <- pe |>
-    filter(op == "=~")
-  
-  errors <- pe |>
-    filter(op == "~~", lhs == rhs, lhs %in% loadings$rhs)
-  
-  lambda_sq <- loadings$est^2
-  theta     <- errors$est
-  
-  sum(lambda_sq) / (sum(lambda_sq) + sum(theta))
-}
-
-
-ave_table <- map_df(
-  cfa_results,
-  function(x) {
-    tibble(
-      survey = x$survey,
-      AVE = compute_ave(x$fit)
-    )
-  }
-)
-```
-
-# Testing divergent validity
-```{r}
-build_multifactor_cfa <- function(data, surveys) {
-  
-  model_parts <- map(
-    surveys,
-    function(survey) {
-      items <- names(data)[startsWith(names(data), survey)]
-      
-      if (length(items) >= 3) {
-        paste0(survey, " =~ ", paste(items, collapse = " + "))
-      } else {
-        NULL
-      }
-    }
-  )
-  
-  model_parts <- compact(model_parts)
-  
-  paste(model_parts, collapse = "\n")
-}
-
-multi_cfa_model <- build_multifactor_cfa(processed_filtered, surveys)
-
-multi_cfa_fit <- cfa(
-  multi_cfa_model,
-  data = processed_filtered,
-  estimator = "MLR",
-  std.lv = TRUE,
-  missing = "fiml"
-)
-
-latent_correlations <- inspect(multi_cfa_fit, "cor.lv")
-latent_correlations
-
-htmt(multi_cfa_model, processed_filtered)
-
-
-jdr_measurement_model <- '
-  # First-order factors
-  WLD =~ copsoq_workload_1 + copsoq_workload_2 + copsoq_workload_3 + copsoq_workload_4
-  PPA =~ ppqr_attitude_7 + ppqr_attitude_8 + ppqr_attitude_9 + ppqr_attitude_10 + ppqr_attitude_11 + ppqr_attitude_12
-  PPS =~ ppqr_stress_1 + ppqr_stress_2 + ppqr_stress_3 + ppqr_stress_4 + ppqr_stress_5 + ppqr_stress_6
-  AMB =~ role_ambiguity_01 + role_ambiguity_02 + role_ambiguity_03 + role_ambiguity_04 + role_ambiguity_05 + role_ambiguity_06
-  CON =~ role_conflict_07 + role_conflict_08 + role_conflict_09 + role_conflict_10 + role_conflict_11 + role_conflict_12
-  WLB =~ wlbm_1 + wlbm_2 + wlbm_3 + wlbm_4
-
-  OPP =~ copsoq_oppor_1 + copsoq_oppor_2 + copsoq_oppor_3
-  MNG =~ copsoq_meaning_1 + copsoq_meaning_2
-  INF =~ copsoq_infl_1 + copsoq_infl_2 + copsoq_infl_3 + copsoq_infl_4
-  SOC =~ copsoq_soc_sup_1 + copsoq_soc_sup_2 + copsoq_soc_sup_3 + copsoq_soc_sup_4
-  SEC =~ jis_1 + jis_2 + jis_3 + jis_4
-  PPR =~ ppqr_resources_13 + ppqr_resources_14 + ppqr_resources_15 + ppqr_resources_16 + ppqr_resources_17 + ppqr_resources_18
-
-  # Second-order factors
-  job_demands =~ WLD + PPA + PPS + AMB + CON + WLB
-  job_resources =~ OPP + MNG + INF + SOC + SEC + PPR
-'
-
-htmt(jdr_measurement_model, processed_filtered)
-
-
-```
-
-
-# Aggregating data
-
-```{r}
-surveys = c("bat", "ppqr_stress", "ppqr_attitude", "ppqr_resources", "copsoq_workload", "copsoq_soc_sup", "copsoq_oppor", "wlbm", "jis",
-            "qrp_attitude", "copsoq_infl", "copsoq_meaning", "role_ambiguity", "role_conflict",
-            "pay_satisfaction", "tool_satisfaction", "general_satisfaction", "open_practice")
-
 aggregate_function <- function(data, survey) {
   data %>%
     group_by(anonym_id) %>%
     summarize(
-      "{survey}_total" := {
+      "{survey}" := {
         vars <- across(starts_with(survey))
-        n_items <- ncol(vars)
-        n_nonmissing <- rowSums(!is.na(vars))
-
-        # Only compute if ≥70% of the items are answered
-        complete_enough <- n_nonmissing / n_items >= 0.70
-
-        # Compute row means with NA removal
-        out <- rowMeans(vars, na.rm = TRUE)
-
-        # If not complete enough → return NA
-        out[!complete_enough] <- NA_real_
-
-        out
+        round(rowMeans(vars),3 )
       }
     )
 }
@@ -334,41 +110,16 @@ aggregated_datasets <- mget(ls(pattern = "_aggregated$"))
 aggregated_data <- reduce(aggregated_datasets, left_join, by = "anonym_id")
 ```
 
-#Joining aggregate data with descriptives
+#Joining aggregate data with item-level and descriptives
 
 ```{r}
-aggregated_data = processed_filtered %>% 
-  select(anonym_id, gender:lazy_responding) %>% 
-  left_join(aggregated_data, by = "anonym_id")
-```
-
-#Rename columns
-
-```{r}
-aggregated_data_final = aggregated_data %>% 
-  rename(burnout = bat_total,
-         pub_pressure_stress = ppqr_stress_total,
-         pub_pressure_attitude = ppqr_attitude_total,
-         pub_pressure_resource = ppqr_resources_total,
-         workload = copsoq_workload_total,
-         social_support = copsoq_soc_sup_total,
-         opportunities = copsoq_oppor_total,
-         qrp_attitude = qrp_attitude_total,
-         influence = copsoq_infl_total,
-         meaning = copsoq_meaning_total,
-         role_ambiguity = role_ambiguity_total,
-         role_conflict = role_conflict_total,
-         pay_satisfaction = pay_satisfaction_total,
-         tool_satisfaction = tool_satisfaction_total,
-         general_satisfaction = general_satisfaction_total,
-         open_practice = open_practice_total,
-         job_security = jis_total,
-         work_life_balance = wlbm_total)
+item_and_aggregate_data = processed_filtered %>% 
+  left_join(aggregated_data, by = "anonym_id") %>% 
+  relocate(anonym_id, gender, title, discipline, last_published, academia_length, phd_dissertation, .before = brt_1)
 ```
 
 #Save data
 
 ```{r}
-write.csv(cronbach_results, here::here("analysis/tables/cronbach_alpha.csv"), row.names = FALSE)
-write_csv(aggregated_data_final, here::here("data/processed/aggregated_data.csv"))
+write_csv(item_and_aggregate_data, here::here("data/processed/aggregated_data.csv"))
 ```
