@@ -61,7 +61,7 @@ meta_data = raw_data |>
 ### Creating notebook
 
 ```{r}
-raw_data_filtered_codebook = raw_data_filtered[1, , drop = FALSE]
+codebook = raw_data_filtered[1, , drop = FALSE]
 ```
 
 ### Unifying syntax
@@ -117,14 +117,16 @@ attention_check = raw_data_attention |>
   select(attention, anonym_id)
 
 raw_data_valid = raw_data_anonymized |> 
-  left_join(attention_check, by = "anonym_id")
+  left_join(attention_check, by = "anonym_id") %>% 
+  filter(attention != "Failed") %>% 
+  dplyr::select(-copsoq_workload_5, -attention_2, -attention)
 ```
 
 # Saving data
 
 ```{r}
-write.csv(raw_data_filtered_valid, here::here("data/processed/raw_to_clean_data.csv"), row.names = FALSE)
-write.csv(raw_data_filtered_codebook, here::here("data/processed/codebook.csv"), row.names = FALSE)
+write.csv(raw_data_valid, here::here("data/processed/raw_to_clean_data.csv"), row.names = FALSE)
+write.csv(codebook, here::here("data/processed/codebook.csv"), row.names = FALSE)
 write.csv(meta_data, here::here("data/processed/meta_data.csv"), row.names = FALSE)
-write.csv(participant_data, here::here("data/processed/participant_checks.csv"), row.names = FALSE)
+write.csv(valid_respones, here::here("data/processed/participant_checks.csv"), row.names = FALSE)
 ```
