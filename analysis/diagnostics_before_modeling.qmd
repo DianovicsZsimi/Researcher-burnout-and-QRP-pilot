@@ -13,6 +13,12 @@ format: html
 ```{r}
 library(tidyverse)
 library(here)
+library(psych)
+library(semTools)
+library(semPower)
+library(MVN)
+library(car)
+library(lavaan)
 
 data_path <- here("data")
 ```
@@ -23,48 +29,169 @@ data_path <- here("data")
 processed = read_csv(here::here("data/processed/aggregated_data.csv"))
 ```
 
-### Testing reliability: Checking McDonald's omega (Cronbach's alpha alternative)
+### Defining items and scales
 
 ```{r}
+# QRP removed
+
 items = c("brt_", "pps_", "ppa_", "ppr_", "wld_", "soc_",
-            "opp_", "wlb_", "jis_", "qrp_", "inf_", "mng_",
+            "opp_", "wlb_", "sec_", "inf_", "mng_",
             "rla_", "rlc_", "pay_", "tol_", "gnl_")
 
-omega_function <- function(data, survey) {
-  items <- data %>%
-    dplyr::select(starts_with(survey))
+surveys = c("brt", "pps", "ppa", "ppr", "wld", "soc",
+            "opp", "wlb", "sec", "inf", "mng",
+            "rla", "rlc", "pay", "tol", "gnl")
+```
+
+## Item-level analyses
+
+### Descriptives
+
+```{r}
+item_descriptives <- function(data, prefixes) {
+  
+ selected_items <- names(data)[
+  Reduce(`|`, lapply(prefixes, function(pfx) startsWith(names(data), pfx)))
+]
+ 
+  desc <- psych::describe(data[, selected_items], fast = FALSE)
+  
+  desc_df <- desc |>
+    as.data.frame() |>
+    tibble::rownames_to_column("item") |>
+    dplyr::select(
+      item,
+      n,
+      mean,
+      sd,
+      median,
+      min,
+      max,
+      skew,
+      kurtosis,
+      se
+     )
+
+  return(desc_df)
+}
+
+descriptives_table <- item_descriptives(processed, items)
+```
+
+### Univariate and multivariate normality
+
+```{r}
+data_normality = processed |> 
+  dplyr::select(starts_with(items)) |>
+  mutate(across(everything(), ~ as.numeric(.x)))
+
+univariate_normality_results = mvn(data_normality, univariate_test = "SW", descriptives = FALSE, tidy = TRUE)$univariate_normality %>% 
+  rename_all(tolower) %>%
+  dplyr::select(variable, statistic, p.value)
+
+multivariate_normality_results = mvn(data_normality, mvn_test = "mardia", descriptives = FALSE, tidy = TRUE)$multivariate_normality
+```
+
+### First-order reliability
+
+```{r}
+omega_function <- function(data, item_prefix) {
+  items_df <- data %>%
+    dplyr::select(starts_with(item_prefix))
+  
+   # remove items with zero variance
+ # items_df <- items_df[, apply(items_df, 2, function(x) var(x, na.rm = TRUE) > 0), drop = FALSE]
+  
+   if (ncol(items_df) < 3) {
+    return(data.frame(
+      item = item_prefix,
+      omega_total = NA_real_
+    ))
+  }
 
   omega_out <- psych::omega(
-    items,
+    items_df,
     nfactors = 1,
+    fm = "pa",
     plot = FALSE
   )
 
   data.frame(
-    survey = survey,
+    item = item_prefix,
     omega_total = omega_out$omega.tot
   )
 }
 
-omega_results <- data.frame()
-
-for (survey in surveys) {
-  omega_result <- omega_function(processed, survey)
-  omega_results <- rbind(omega_results, omega_result)
-}
-
-# Second-order factor analyses for each survey
-WLD + PPA + PPS + AMB + CON + WLB
-OPP + MNG + INF + SOC + PPR + SEC
-
-job_demands = c("ppqr_stress", "copsoq_workload", "ppqr_attitude", "role_conflict","role_conflict", "wlbm")
-job_resources = c("ppqr_resources",  "copsoq_soc_sup", "copsoq_oppor", "jis", "copsoq_infl", "copsoq_meaning")
-
-omega()
-
+omega_results <- dplyr::bind_rows(
+  lapply(items, function(prefix) omega_function(processed, prefix)))
 ```
 
-# Testing convergent validity with CFA
+### Unidimensionality
+
+```{r}
+unidimensionality_function <- function(data, item_prefix) {
+  items_df <- data |>
+    dplyr::select(starts_with(item_prefix))
+
+  if (ncol(items_df) < 2) {
+    return(data.frame(
+      item = item_prefix,
+      proportion_variance = NA,
+      min_uniqueness = NA,
+      max_loading = NA,
+      rmsr = NA
+    ))
+  }
+  
+  fa_out <- psych::fa(
+    items_df,
+    nfactors = 1,
+    fm = "minres",
+    rotate = "none"
+  )
+
+  loadings <- as.numeric(fa_out$loadings[, 1])
+  uniq <- fa_out$uniquenesses
+  
+  data.frame(
+    item = item_prefix,
+    proportion_variance = fa_out$Vaccounted["Proportion Var", 1],
+    min_uniqueness = min(uniq, na.rm = TRUE),
+    max_loading = max(abs(loadings), na.rm = TRUE),
+    rmsr = fa_out$rms
+  )
+}
+
+unidimensionality_results <- dplyr::bind_rows(
+  lapply(items, function(s) unidimensionality_function(processed, s))
+)
+
+## Identifying scales that may not be unidimensional based on lower than 40% variance explained
+
+unidimensionality_diagnostics <- unidimensionality_results %>%
+  filter(proportion_variance < 0.40,
+         item != "qrp_") %>%
+  dplyr::pull(item)
+
+# Checking factor number with parallel analysis
+
+pa_table <- lapply(unidimensionality_diagnostics, function(prefix) {
+  df <- processed %>% dplyr::select(starts_with(prefix))
+  pa <- psych::fa.parallel(df, fa="fa", fm="minres", plot=FALSE)
+  
+  data.frame(
+    prefix = prefix,
+    eigen1 = pa$fa.values[1],
+    eigen2 = pa$fa.values[2],
+    random1 = pa$fa.sim[1],
+    random2 = pa$fa.sim[2],
+    suggested = pa$nfact
+  )
+}) %>% dplyr::bind_rows()
+```
+
+### Convergent validity
+
 ```{r}
 fit_single_factor_cfa <- function(data, survey_prefix) {
   
@@ -97,11 +224,10 @@ fit_single_factor_cfa <- function(data, survey_prefix) {
 }
 
 cfa_results <- map(
-  surveys,
+  items,
   ~ fit_single_factor_cfa(processed, .x)
 )
 
-# Remove NULLs (if any survey had too few items)
 cfa_results <- compact(cfa_results)
 
 loadings_table <- map_df(
@@ -137,71 +263,139 @@ ave_table <- map_df(
     tibble(
       survey = x$survey,
       AVE = compute_ave(x$fit)
-    )
+    ) %>% 
+      mutate(survey = gsub("_", "", survey))
   }
 )
+
+
 ```
 
-# Testing divergent validity
+### Divergent validity
+
 ```{r}
-build_multifactor_cfa <- function(data, surveys) {
+survey_to_item <- setNames(items, surveys)
+
+
+build_multifactor_cfa <- function(data, surveys, items) {
   
-  model_parts <- map(
-    surveys,
-    function(survey) {
-      items <- names(data)[startsWith(names(data), survey)]
-      
-      if (length(items) >= 3) {
-        paste0(survey, " =~ ", paste(items, collapse = " + "))
-      } else {
-        NULL
-      }
-    }
-  )
+  # map survey names to item prefixes
+  survey_to_item <- setNames(items, surveys)
   
-  model_parts <- compact(model_parts)
+  # build model for each survey
+  model_parts <- map(surveys, function(sv) {
+    prefix <- survey_to_item[[sv]]
+    
+    # select item-level variables
+    indicators <- names(data)[startsWith(names(data), prefix)]
+    
+    # skip scales with <3 items
+    if (length(indicators) < 3) return(NULL)
+    
+    paste0(sv, " =~ ", paste(indicators, collapse = " + "))
+  })
   
-  paste(model_parts, collapse = "\n")
+  paste(compact(model_parts), collapse = "\n")
 }
 
-multi_cfa_model <- build_multifactor_cfa(processed, surveys)
+
+multi_cfa_model <- build_multifactor_cfa(processed, surveys, items)
 
 multi_cfa_fit <- cfa(
   multi_cfa_model,
   data = processed,
   estimator = "MLR",
   std.lv = TRUE,
-  missing = "fiml"
+  check.lv.names = FALSE
 )
+
 
 latent_correlations <- inspect(multi_cfa_fit, "cor.lv")
 latent_correlations
 
 htmt(multi_cfa_model, processed)
 
+# average variance extracted greater than shared variance
 
-jdr_measurement_model <- '
-  # First-order factors
-  WLD =~ copsoq_workload_1 + copsoq_workload_2 + copsoq_workload_3 + copsoq_workload_4
-  PPA =~ ppqr_attitude_7 + ppqr_attitude_8 + ppqr_attitude_9 + ppqr_attitude_10 + ppqr_attitude_11 + ppqr_attitude_12
-  PPS =~ ppqr_stress_1 + ppqr_stress_2 + ppqr_stress_3 + ppqr_stress_4 + ppqr_stress_5 + ppqr_stress_6
-  AMB =~ role_ambiguity_01 + role_ambiguity_02 + role_ambiguity_03 + role_ambiguity_04 + role_ambiguity_05 + role_ambiguity_06
-  CON =~ role_conflict_07 + role_conflict_08 + role_conflict_09 + role_conflict_10 + role_conflict_11 + role_conflict_12
-  WLB =~ wlbm_1 + wlbm_2 + wlbm_3 + wlbm_4
+# Creating AVE pairs
 
-  OPP =~ copsoq_oppor_1 + copsoq_oppor_2 + copsoq_oppor_3
-  MNG =~ copsoq_meaning_1 + copsoq_meaning_2
-  INF =~ copsoq_infl_1 + copsoq_infl_2 + copsoq_infl_3 + copsoq_infl_4
-  SOC =~ copsoq_soc_sup_1 + copsoq_soc_sup_2 + copsoq_soc_sup_3 + copsoq_soc_sup_4
-  SEC =~ jis_1 + jis_2 + jis_3 + jis_4
-  PPR =~ ppqr_resources_13 + ppqr_resources_14 + ppqr_resources_15 + ppqr_resources_16 + ppqr_resources_17 + ppqr_resources_18
+ave_pairs <- expand.grid(
+  survey1 = surveys,
+  survey2 = surveys,
+  stringsAsFactors = FALSE
+) %>%
+  filter(survey1 < survey2) %>%
+  mutate(
+    ave1 = ave_table$AVE[match(survey1, ave_table$survey)],
+    ave2 = ave_table$AVE[match(survey2, ave_table$survey)]
+  ) %>% 
+  rowwise() %>%
+  filter(!is.na(ave1) & !is.na(ave2))
 
-  # Second-order factors
-  job_demands =~ WLD + PPA + PPS + AMB + CON + WLB
-  job_resources =~ OPP + MNG + INF + SOC + SEC + PPR
-'
+# Extract latent correlations
 
-htmt(jdr_measurement_model, processed)
-
-
+ave_pairs <- ave_pairs %>%
+  mutate(
+    shared_variance = latent_correlations[
+      cbind(survey1, survey2)
+    ]^2,
+    ave_greater = (ave1 > shared_variance) & (ave2 > shared_variance)
+  )
+  
 ```
+
+### Multicollinearity
+
+```{r}
+correlation_matrix <- processed %>%
+  dplyr::select(all_of(surveys)) %>%
+  cor(use = "pairwise.complete.obs") %>%
+  round(2)
+
+correlation_matrix[abs(correlation_matrix) < 0.50] <- NA
+correlation_matrix <- as.data.frame(correlation_matrix)
+
+lm_vif <- lm(brt ~ wld + ppa + pps + rla + rlc + wlb + opp + mng + inf + soc + ppr + sec, data = processed)
+vif(lm_vif)
+
+# No multicollinearity issues detected (all correlations < 0.70)
+```
+
+### Linearity
+
+### Common method variance
+
+### Underperforming constructs
+
+```{r}
+underperforming_scales = c("pps", "ppr", "rlc")
+
+# Detailed CFA
+
+underperforming_cfa_results <- lapply(underperforming_scales, function(survey) {
+  fit_single_factor_cfa(processed, paste0(survey, "_"))
+})
+
+# underperforming_cfa_results <- compact(underperforming_cfa_results)
+lapply(underperforming_cfa_results, function(x) summary(x$fit, fit.measures = TRUE, standardized = TRUE))
+lapply(underperforming_cfa_results, function(x) modificationIndices(x$fit, sort. = TRUE, maximum.number = 10))
+
+# Fit EFA for PPR and RLC (for PPS the parallel analysis suggested unidimensionality)
+
+ppr_fit_1 = efa(processed, ov.names = c("ppr_13", "ppr_14", "ppr_15", "ppr_16", "ppr_17", "ppr_18"), nfactors = 1, rotation = "oblimin")
+ppr_fit_2 = efa(processed, ov.names = c("ppr_13", "ppr_14", "ppr_15", "ppr_16", "ppr_17", "ppr_18"), nfactors = 2, rotation = "oblimin")
+summary(ppr_fit_1)
+summary(ppr_fit_2)
+fitMeasures(ppr_fit_1, "bic")
+fitMeasures(ppr_fit_2, "bic")
+
+rlc_fit_1 = efa(processed, ov.names = c("rlc_1", "rlc_2", "rlc_3", "rlc_4", "rlc_5", "rlc_6"), nfactors = 1, rotation = "oblimin")
+rlc_fit_2 = efa(processed, ov.names = c("rlc_1", "rlc_2", "rlc_3", "rlc_4", "rlc_5", "rlc_6"), nfactors = 2, rotation = "oblimin")
+summary(rlc_fit_1)
+summary(rlc_fit_2)
+fitMeasures(rlc_fit_1, "bic")
+fitMeasures(rlc_fit_2, "bic")
+
+# Two factor model is better for both PPR and RLC based on BIC and fit indices, however, only PPR has theoretical interpretation. Consider revising these scales in future studies. 
+```
+

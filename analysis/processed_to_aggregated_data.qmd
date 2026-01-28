@@ -30,7 +30,7 @@ processed = read_csv(here::here("data/processed/processed_data.csv"))
 
 ```{r}
 surveys = c("brt", "pps", "ppa", "ppr", "wld", "soc",
-            "opp", "wlb", "jis", "qrp", "inf", "mng",
+            "opp", "wlb", "sec", "qrp", "inf", "mng",
             "rla", "rlc", "pay", "tol", "gnl")
 
 missingness_summary = processed %>%

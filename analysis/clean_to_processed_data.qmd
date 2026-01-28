@@ -35,7 +35,7 @@ renamed_data <- clean_data %>%
     .cols = starts_with("ppqr_")
   ) %>% 
   dplyr::rename_with(
-    ~ gsub("^jis_", "jis_", .x),
+    ~ gsub("^jis_", "sec_", .x),
     .cols = starts_with("jis_")
   ) %>% 
   dplyr::rename_with(
@@ -91,7 +91,7 @@ renamed_data <- clean_data %>%
 ```{r}
 burnout_columns = c("brt_1", "brt_2", "brt_3", "brt_4")
 burnout_data = renamed_data |> 
-  select(brt_1, brt_2, brt_3, brt_4, anonym_id)
+  dplyr::select(brt_1, brt_2, brt_3, brt_4, anonym_id)
 
 for (column in burnout_columns) {
   burnout_data[[column]] = case_when(
@@ -110,10 +110,10 @@ for (column in burnout_columns) {
 
 ```{r}
 pp_data = renamed_data |> 
-  select(contains("pp"), anonym_id)
+  dplyr::select(contains("pp"), anonym_id)
 
 pp_columns = pp_data |> 
-  select(contains("pp")) |> 
+  dplyr::select(contains("pp")) |> 
   colnames()
 
 
@@ -128,15 +128,15 @@ for (column in pp_columns) {
 }
 
 pp_stress_subscale = pp_data |> 
-  select(pp_1:pp_6, anonym_id) |> 
+  dplyr::select(pp_1:pp_6, anonym_id) |> 
   rename_with(~str_replace(., "pp", "pps"))
 
 pp_attitude_subscale = pp_data |> 
-  select(pp_7:pp_12, anonym_id) |> 
+  dplyr::select(pp_7:pp_12, anonym_id) |> 
   rename_with(~str_replace(., "pp", "ppa"))
 
 pp_resources_subscale = pp_data |> 
-  select(pp_13:pp_18, anonym_id) |> 
+  dplyr::select(pp_13:pp_18, anonym_id) |> 
   rename_with(~str_replace(., "pp", "ppr"))
 
 #Reverse coded items for stress: 5, 6; for attitude: 11; resources: 16, 17
@@ -186,10 +186,10 @@ for (col in reverse_pp_resources_columns) {
 
 ```{r}
 jis_data = renamed_data |> 
-  select(contains("jis"), anonym_id)
+  dplyr::select(contains("sec"), anonym_id)
 
 jis_columns = jis_data |> 
-  select(contains("jis")) |> 
+  dplyr::select(contains("sec")) |> 
   colnames()
 
 
@@ -205,7 +205,7 @@ for (column in jis_columns) {
 
 #Reverse coded items: jis_2 --> jis_1, jis_3, jis_4
 #Wrong recoding direction: The higher the score, the higher job security should be, so the job resources latent variable is consistent
-reverse_jis_columns = c("jis_1", "jis_3", "jis_4")
+reverse_jis_columns = c("sec_1", "sec_3", "sec_4")
 
 jis_data_reversed = jis_data
 
@@ -224,10 +224,10 @@ for (col in reverse_jis_columns) {
 
 ```{r}
 wlb_data = renamed_data |> 
-  select(contains("wlb"), anonym_id)
+  dplyr::select(contains("wlb"), anonym_id)
 
 wlb_columns = wlb_data |> 
-  select(contains("wlb")) |> 
+  dplyr::select(contains("wlb")) |> 
   colnames()
 
 for (column in wlb_columns) {
@@ -261,10 +261,10 @@ for (col in reverse_wlb_columns) {
 
 ```{r}
 workload_data = renamed_data |> 
-  select(contains("wld"), anonym_id)
+  dplyr::select(contains("wld"), anonym_id)
 
 workload_columns = workload_data |> 
-  select(contains("wld")) |> 
+  dplyr::select(contains("wld")) |> 
   colnames()
 
 for (column in workload_columns) {
@@ -293,11 +293,11 @@ workload_data_reversed = workload_data |>
 
 ```{r}
 soc_support_data = renamed_data |> 
-  select(contains("soc"), anonym_id)
+  dplyr::select(contains("soc"), anonym_id)
 
 
 soc_support_columns = soc_support_data |> 
-  select(contains("soc")) |> 
+  dplyr::select(contains("soc")) |> 
   colnames()
 
 for (column in soc_support_columns) {
@@ -317,10 +317,10 @@ for (column in soc_support_columns) {
 
 ```{r}
 opportunities_data = renamed_data |> 
-  select(contains("opp"), anonym_id)
+  dplyr::select(contains("opp"), anonym_id)
 
 opportunities_columns = opportunities_data |> 
-  select(contains("opp")) |> 
+  dplyr::select(contains("opp")) |> 
   colnames()
 
 for (column in opportunities_columns) {
@@ -340,10 +340,10 @@ for (column in opportunities_columns) {
 
 ```{r}
 qrp_data = renamed_data |> 
-  select(contains("qrp"), anonym_id)
+  dplyr::select(contains("qrp"), anonym_id)
 
 qrp_columns = qrp_data |> 
-  select(contains("qrp")) |> 
+  dplyr::select(contains("qrp")) |> 
   colnames()
 
 for (column in qrp_columns) {
@@ -363,10 +363,10 @@ for (column in qrp_columns) {
 
 ```{r}
 influence_data = renamed_data |> 
-  select(contains("inf"), anonym_id)
+  dplyr::select(contains("inf"), anonym_id)
 
 influence_columns = influence_data |> 
-  select(contains("inf")) |> 
+  dplyr::select(contains("inf")) |> 
   colnames()
 
 for (column in influence_columns) {
@@ -386,10 +386,10 @@ for (column in influence_columns) {
 
 ```{r}
 meaning_data = renamed_data |> 
-  select(contains("mng"), anonym_id)
+  dplyr::select(contains("mng"), anonym_id)
 
 meaning_columns = meaning_data |> 
-  select(contains("mng")) |> 
+  dplyr::select(contains("mng")) |> 
   colnames()
 
 for (column in meaning_columns) {
@@ -408,16 +408,12 @@ for (column in meaning_columns) {
 ### Change responses from string to integer for Role ambiguity and Role Conflict Scale (Role Ambiguity) questions
 
 ```{r}
-# FIX
-
+# FIX 
 role_stressor_data = renamed_data |> 
-  select(contains("rl"), anonym_id)
-
-# role_stressor_data = role_stressor_data |> 
-#   select(order(colnames(role_stressor_data)))
+  dplyr::select(contains("rl"), anonym_id)
 
 role_stressor_columns = role_stressor_data |> 
-  select(contains("rl")) |> 
+  dplyr::select(contains("rl")) |> 
   colnames()
 
 for (column in role_stressor_columns) {
@@ -432,9 +428,9 @@ for (column in role_stressor_columns) {
   )
 }
 
-#Reverse coded items: 4, 5, 6, 10, 11, 12 
-reverse_stressor_columns = c("rl_4", "rl_5", "rl_6", 
-                              "rl_10", "rl_11", "rl_12")
+#Reverse coded items: 1, 3, 4, 6, 8, 11 
+reverse_stressor_columns = c("rl_1", "rl_3", "rl_4", 
+                              "rl_6", "rl_8", "rl_11")
 
 role_stressor_data_reversed = role_stressor_data
 
@@ -451,22 +447,35 @@ for (col in reverse_stressor_columns) {
 }
 
 role_ambiguity_data_reversed = role_stressor_data_reversed |> 
-  select(rl_1:rl_6, anonym_id) |> 
-  rename_with(~str_replace(., "rl", "rla"))
+  dplyr::select(rl_1, rl_4, rl_5, rl_6, rl_9, rl_10, anonym_id) |> 
+  rename_with(~str_replace(., "rl", "rla")) %>% 
+  rename(rla_1 = rla_1,
+         rla_2 = rla_4,
+         rla_3 = rla_5,
+         rla_4 = rla_6,
+         rla_5 = rla_9,
+         rla_6 = rla_10)
 
 role_conflict_data_reversed = role_stressor_data_reversed |> 
-  select(rl_7:rl_12, anonym_id) |> 
-  rename_with(~str_replace(., "rl", "rlc"))
+  dplyr::select(rl_2, rl_3, rl_7, rl_8, rl_11, rl_12, anonym_id) |> 
+  rename_with(~str_replace(., "rl", "rlc")) %>% 
+  rename(rlc_1 = rlc_2,
+         rlc_2 = rlc_3,
+         rlc_3 = rlc_7,
+         rlc_4 = rlc_8,
+         rlc_5 = rlc_11,
+         rlc_6 = rlc_12)
+
 ```
 
 ### Change responses from string to integer for Pay Satisfaction questions
 
 ```{r}
 pay_satisfaction_data = renamed_data |> 
-  select(contains("pay"), anonym_id)
+  dplyr::select(contains("pay"), anonym_id)
 
 pay_satisfaction_columns = pay_satisfaction_data |>
-  select(contains("pay")) |>
+  dplyr::select(contains("pay")) |>
   colnames()
 
 for (column in pay_satisfaction_columns) {
@@ -488,10 +497,10 @@ for (column in pay_satisfaction_columns) {
 
 ```{r}
 tool_satisfaction_data = renamed_data |> 
-  select(contains("tol"), anonym_id)
+  dplyr::select(contains("tol"), anonym_id)
 
 tool_satisfaction_columns = tool_satisfaction_data |>
-  select(contains("tol")) |>
+  dplyr::select(contains("tol")) |>
   colnames()
 
 for (column in tool_satisfaction_columns) {
@@ -513,10 +522,10 @@ for (column in tool_satisfaction_columns) {
 
 ```{r}
 general_satisfaction_data = renamed_data |> 
-  select(contains("gnl"), anonym_id)
+  dplyr::select(contains("gnl"), anonym_id)
 
 general_satisfaction_columns = general_satisfaction_data |>
-  select(contains("gnl")) |>
+  dplyr::select(contains("gnl")) |>
   colnames()
 
 for (column in general_satisfaction_columns) {
@@ -561,7 +570,7 @@ survey_data = burnout_data |>
 
 ```{r}
 descriptive_data = renamed_data |> 
-  select(anonym_id, gender:phd_dissertation)
+  dplyr::select(anonym_id, gender:phd_dissertation)
 ```
 
 ### Join descriptive and survey data

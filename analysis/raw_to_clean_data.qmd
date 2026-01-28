@@ -36,7 +36,7 @@ raw_data = raw_data_01 |>
 
 ```{r}
 raw_data_filtered = raw_data |> 
-  select(-StartDate, 
+  dplyr::select(-StartDate, 
          -EndDate,
          -Status,
          -Duration..in.seconds.,
@@ -47,7 +47,7 @@ raw_data_filtered = raw_data |>
          -DistributionChannel)
 
 meta_data = raw_data |> 
-  select(StartDate, 
+  dplyr::select(StartDate, 
          EndDate,
          Status,
          Duration..in.seconds.,
@@ -62,6 +62,13 @@ meta_data = raw_data |>
 
 ```{r}
 codebook = raw_data_filtered[1, , drop = FALSE]
+codebook = codebook |> 
+  pivot_longer(everything(), names_to = "variable", values_to = "description") %>% 
+  separate(
+    col = description,
+    into = c("context", "question"),
+    sep = " - "
+  )
 ```
 
 ### Unifying syntax
@@ -108,13 +115,13 @@ raw_data_anonymized = raw_data_valid %>%
 
 raw_data_attention = raw_data_anonymized |> 
   rename(attention_1 = copsoq_workload_5) |>
-  select(attention_1, attention_2, anonym_id)
+  dplyr::select(attention_1, attention_2, anonym_id)
 
 attention_check = raw_data_attention |> 
   mutate(attention_1 = if_else(attention_1 == "Rarely", 1, 0),
          attention_2 = if_else(attention_2 == "Strongly agree", 1, 0)) |> 
   mutate(attention = ifelse(attention_1 == 0 & attention_2 == 0, "Failed", "Passed")) |> 
-  select(attention, anonym_id)
+  dplyr::select(attention, anonym_id)
 
 raw_data_valid = raw_data_anonymized |> 
   left_join(attention_check, by = "anonym_id") %>% 
