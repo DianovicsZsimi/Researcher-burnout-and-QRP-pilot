@@ -359,11 +359,49 @@ lm_vif <- lm(brt ~ wld + ppa + pps + rla + rlc + wlb + opp + mng + inf + soc + p
 vif(lm_vif)
 
 # No multicollinearity issues detected (all correlations < 0.70)
+
 ```
 
 ### Linearity
 
-### Common method variance
+```{r}
+linearity_data <- processed |>
+  dplyr::mutate(
+    job_demands_total = rowMeans(dplyr::select(cur_data(), wld, ppa, pps, rla, rlc, wlb), na.rm = TRUE),
+    job_resources_total = rowMeans(dplyr::select(cur_data(), opp, mng, inf, soc, pay, tol, ppr, gnl, sec), na.rm = TRUE),
+    burnout_total = brt
+  )
+
+ggplot(linearity_data, aes(x = job_demands_total, y = burnout_total)) +
+  geom_point() + geom_smooth(method = "loess") + ggtitle("Job Demands → Burnout")
+
+ggplot(linearity_data, aes(x = job_resources_total, y = burnout_total)) +
+  geom_point() + geom_smooth(method = "loess") + ggtitle("Job Resources → Burnout")
+
+job_demand_items <- c("wld", "ppa", "pps", "rla", "rlc", "wlb")
+for(item in job_demand_items) {
+  print(
+    ggplot(linearity_data, aes_string(x = "job_demands_total", y = item)) +
+      geom_point() + geom_smooth(method = "loess") +
+      ggtitle(paste(item, "vs Job Demands"))
+  )
+}
+
+job_resource_items <- c("opp", "mng", "inf", "soc", "pay", "tol", "ppr", "gnl", "sec")
+for(item in job_resource_items) {
+  print(
+    ggplot(linearity_data, aes_string(x = "job_resources_total", y = item)) +
+      geom_point() + geom_smooth(method = "loess") +
+      ggtitle(paste(item, "vs Job Resources"))
+  )
+}
+
+lm1 <- lm(burnout_total ~ job_demands_total + job_resources_total, data = linearity_data)
+plot(lm1, which = 1)
+plot(lm1, which = 2)
+
+# Linearity assumption appears to be met
+```
 
 ### Underperforming constructs
 
@@ -399,3 +437,109 @@ fitMeasures(rlc_fit_2, "bic")
 # Two factor model is better for both PPR and RLC based on BIC and fit indices, however, only PPR has theoretical interpretation. Consider revising these scales in future studies. 
 ```
 
+## Construct- and factor-level analyses
+
+## Measurement model
+
+```{r}
+jdr_measurement_model <- '
+  # First-order factors
+  wld =~ wld_1 + wld_2 + wld_3 + wld_4
+  ppa =~ ppa_7 + ppa_8 + ppa_9 + ppa_10 + ppa_11 + ppa_12
+  pps =~ pps_1 + pps_2 + pps_3 + pps_4 + pps_5 + pps_6
+  rla =~ rla_1 + rla_2 + rla_3 + rla_4 + rla_5 + rla_6
+  rlc =~ rlc_1 + rlc_2 + rlc_3 + rlc_4 + rlc_5 + rlc_6
+  wlb =~ wlb_1 + wlb_2 + wlb_3 + wlb_4
+  
+  opp =~ opp_1 + opp_2 + opp_3
+  mng =~ mng_1 + mng_2 
+  inf =~ inf_1 + inf_2 + inf_3 + inf_4
+  soc =~ soc_1 + soc_2 + soc_3 + soc_4
+  ppr =~ ppr_13 + ppr_14 + ppr_15 + ppr_16 + ppr_17 + ppr_18
+  sec =~ sec_1 + sec_2 + sec_3 + sec_4
+
+
+  # Job Demands
+  job_demands =~ wld + ppa + pps + rla + rlc + wlb
+
+  # Job Resources
+  job_resources =~ opp + mng + inf + soc + ppr + sec
+
+  # Burnout
+  burnout =~ brt
+'
+
+jdr_measurement_fit <- cfa(
+  jdr_measurement_model,
+  data = processed,
+  estimator = "MLR",
+  std.lv = TRUE
+)
+  
+```
+
+
+### Common method variance
+
+```{r}
+constructs = processed[, c("brt",
+              "wld", "ppa", "pps", "rla", "rlc", "wlb",
+              "opp", "mng", "inf", "soc", "ppr", "sec")]
+
+harman_1f <- fa(constructs,
+                nfactors = 1,
+                rotate = "none",
+                fm = "pa")
+
+harman_1f$Vaccounted
+```
+
+### Second-order reliability
+
+```{r}
+semTools::compRelSEM(jdr_measurement_fit, higher = c("job_demands", "job_resources"))
+```
+
+### Second-order convergent validity
+
+```{r}
+stdsol <- standardizedSolution(jdr_measurement_fit)
+
+load_dem <- subset(stdsol, lhs == "job_demands" & op == "=~")[, "est.std"]
+
+resid_dem <- subset(stdsol, lhs == "job_demands" & op == "~~" & rhs != lhs)[, "est.std"]
+
+r2_vals <- inspect(jdr_measurement_fit, "r2")
+
+resid_dem <- 1 - r2_vals[c("wld", "ppa", "pps", "rla", "rlc", "wlb")]
+
+AVE_dem <- sum(load_dem^2) / (sum(load_dem^2) + sum(resid_dem))
+AVE_dem
+
+load_res <- subset(stdsol, lhs == "job_resources" & op == "=~")[, "est.std"]
+resid_res <- 1 - r2_vals[c("opp", "mng", "inf", "soc", "sec", "ppr")]
+
+AVE_res <- sum(load_res^2) / (sum(load_res^2) + sum(resid_res))
+AVE_res
+
+lambda_items <- subset(stdsol, op == "=~" & lhs %in% c("wld", "ppa", "pps", "rla", "rlc", "wlb"))[, c("lhs","rhs","est.std")]
+gamma_factors <- subset(stdsol, op == "=~" & lhs == "job_demands")[, c("lhs","rhs","est.std")]
+lambda_items$gamma <- gamma_factors$est.std[ match(lambda_items$lhs, gamma_factors$rhs) ]
+lambda_items$combined <- lambda_items$est.std * lambda_items$gamma
+p <- nrow(lambda_items)
+
+AVE_dem <- sum(lambda_items$combined^2) / p
+AVE_dem
+
+```
+### Second-order divergent validity
+
+### Multicollinearity
+
+### Outlier detection
+
+### Power analysis for construct-level SEM
+
+### Power analysis for item-level SEM
+
+### Parceling strategy

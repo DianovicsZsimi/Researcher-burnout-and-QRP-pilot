@@ -44,37 +44,14 @@ data_path <- here("data")
 data = read_csv(here::here("data/processed/aggregated_data.csv"))
 ```
 
-### Clean data for graphs and analysis
-
-```{r}
-data = data |> 
-  rename(
-    WLD = workload,
-    PPA = pub_pressure_attitude,
-    PPR = pub_pressure_resource,
-    PPS = pub_pressure_stress,
-    AMB = role_ambiguity,
-    CON = role_conflict,
-    WLB = work_life_balance,
-    OPP = opportunities,
-    MNG = meaning,
-    INF = influence,
-    SOC = social_support,
-    PAY = pay_satisfaction,
-    TOL = tool_satisfaction,
-    GNL = general_satisfaction,
-    SEC = job_security
-  )
-```
-
 # Latent variables as imagined by the Job Demands-Resources Model of Burnout
 
 # Job demands and resources
 
 ```{r}
 # Additional information:
-# Scores are aggregate means of the respective scales, calculated if at least 70% of the items were answered.
-# For a larger dataset, parceling or item-level analysis could be considered.
+# Scores are aggregate means of the respective scales.
+# For a larger dataset, parceling or item-level analysis could be rlcsidered.
 # Missing data imputation was not performed for SEM
 # There is multivariate non-normality, so robust ML estimation is used.
 # Data is linear, and no multicollinearity issues were detected.
@@ -85,18 +62,18 @@ data = data |>
 ## Job demands as latent variable
 
 ```{r}
-#Job demands are: workload, pubplication pressure_stress, publication_pressure_attitude, role stressors such as ambiguity and conflict, work-life balance
+#Job demands are: workload, pubplication pressure_stress, publication_pressure_attitude, role stressors such as rlaiguity and rlcflict, work-life balance
 
 job_demands = data |>
-  dplyr::select(anonym_id, WLD, PPA, PPS, AMB, CON, WLB)
+  dplyr::select(anonym_id, wld, ppa, pps, rla, rlc, wlb)
 
 job_demands_latent = cfa(
   '
   # Measurement model
-  job_demands =~ WLD + PPA + PPS + AMB + CON + WLB
+  job_demands =~ wld + ppa + pps + rla + rlc + wlb
   
   # Residual correlations based on theory and expected overlap
-    AMB ~~ CON
+    rla ~~ rlc
   ',
   data = job_demands,
   estimator = "MLM",
@@ -118,15 +95,15 @@ dev.off()
 #Job resources are: opportunities, meaning, influence, social support, pay, tool, and general satisfaction, job insecurity
 
 job_resources = data |>
-  dplyr::select(anonym_id, OPP, MNG, INF, SOC, PAY, TOL, GNL, PPR, SEC)
+  dplyr::select(anonym_id, opp, mng, inf, soc, pay, tol, gnl, ppr, sec)
 
 job_resources_latent = cfa(
   '
-  job_resources =~ OPP + MNG + INF + SOC + PAY + TOL + PPR + GNL + SEC
+  job_resources =~ opp + mng + inf + soc + pay + tol + ppr + gnl + sec
   
   # Residual correlations based on theory and expected overlap
-    MNG ~~ GNL
-    PAY ~~ TOL
+    mng ~~ gnl
+    pay ~~ tol
   ',
   data = job_resources,
   estimator = "MLM",
@@ -148,26 +125,26 @@ dev.off()
 ```{r}
 jdr_b_model = '
   # Measurement model
-  job_demands =~ WLD + PPA + PPS + AMB + CON + WLB
-  job_resources =~ OPP + MNG + INF + SOC + PAY + TOL + PPR + GNL + SEC
+  job_demands =~ wld + ppa + pps + rla + rlc + wlb
+  job_resources =~ opp + mng + inf + soc + pay + tol + ppr + gnl + sec
   
   # Residual correlations
-  AMB ~~ CON
-  PAY ~~ TOL
+  rla ~~ rlc
+  pay ~~ tol
   
   # Structural model
-  burnout ~ job_demands + job_resources
+  brt ~ job_demands + job_resources
 '
 ```
 
-### Non-imputed data approach
+### JDR-Burnout model fitting
 
 ```{r}
 jdr_b_fit = sem(jdr_b_model, data = data, std.lv = TRUE, estimator = "MLR", se = "robust.sem")
 
 summary(jdr_b_fit, fit.measures = TRUE, standardized = TRUE, modindices = TRUE, rsquare = TRUE)
 modindices(jdr_b_fit, sort = TRUE)
-compRelSEM(jdr_b_fit, higher = c("job_demands", "job_resources"))  # if model uses latent variables
+# compRelSEM(jdr_b_fit, higher = c("job_demands", "job_resources"))  # if model uses latent variables
 
 
 summary_text <- capture.output(summary(jdr_b_fit, fit.measures = TRUE, standardized = TRUE, modindices = TRUE))
@@ -200,10 +177,6 @@ dev.off()
 
 ```{r}
 inspect(jdr_b_fit, "std")
-semTools::compRelSEM(jdr_b_fit)  # if model uses latent variables
-
-
-
 ```
 
 # Checking convergent validity
@@ -211,23 +184,23 @@ semTools::compRelSEM(jdr_b_fit)  # if model uses latent variables
 ```{r}
 jdr_measurement_model <- '
   # First-order factors
-  WLD =~ copsoq_workload_1 + copsoq_workload_2 + copsoq_workload_3 + copsoq_workload_4
-  PPA =~ ppqr_attitude_7 + ppqr_attitude_8 + ppqr_attitude_9 + ppqr_attitude_10 + ppqr_attitude_11 + ppqr_attitude_12
-  PPS =~ ppqr_stress_1 + ppqr_stress_2 + ppqr_stress_3 + ppqr_stress_4 + ppqr_stress_5 + ppqr_stress_6
-  AMB =~ role_ambiguity_01 + role_ambiguity_02 + role_ambiguity_03 + role_ambiguity_04 + role_ambiguity_05 + role_ambiguity_06
-  CON =~ role_conflict_07 + role_conflict_08 + role_conflict_09 + role_conflict_10 + role_conflict_11 + role_conflict_12
-  WLB =~ wlbm_1 + wlbm_2 + wlbm_3 + wlbm_4
+  wld =~ copsoq_workload_1 + copsoq_workload_2 + copsoq_workload_3 + copsoq_workload_4
+  ppa =~ ppqr_attitude_7 + ppqr_attitude_8 + ppqr_attitude_9 + ppqr_attitude_10 + ppqr_attitude_11 + ppqr_attitude_12
+  pps =~ ppqr_stress_1 + ppqr_stress_2 + ppqr_stress_3 + ppqr_stress_4 + ppqr_stress_5 + ppqr_stress_6
+  rla =~ role_rlaiguity_01 + role_rlaiguity_02 + role_rlaiguity_03 + role_rlaiguity_04 + role_rlaiguity_05 + role_rlaiguity_06
+  rlc =~ role_rlcflict_07 + role_rlcflict_08 + role_rlcflict_09 + role_rlcflict_10 + role_rlcflict_11 + role_rlcflict_12
+  wlb =~ wlbm_1 + wlbm_2 + wlbm_3 + wlbm_4
 
-  OPP =~ copsoq_oppor_1 + copsoq_oppor_2 + copsoq_oppor_3
-  MNG =~ copsoq_meaning_1 + copsoq_meaning_2
-  INF =~ copsoq_infl_1 + copsoq_infl_2 + copsoq_infl_3 + copsoq_infl_4
-  SOC =~ copsoq_soc_sup_1 + copsoq_soc_sup_2 + copsoq_soc_sup_3 + copsoq_soc_sup_4
-  SEC =~ jis_1 + jis_2 + jis_3 + jis_4
-  PPR =~ ppqr_resources_13 + ppqr_resources_14 + ppqr_resources_15 + ppqr_resources_16 + ppqr_resources_17 + ppqr_resources_18
+  opp =~ copsoq_oppor_1 + copsoq_oppor_2 + copsoq_oppor_3
+  mng =~ copsoq_meaning_1 + copsoq_meaning_2
+  inf =~ copsoq_infl_1 + copsoq_infl_2 + copsoq_infl_3 + copsoq_infl_4
+  soc =~ copsoq_soc_sup_1 + copsoq_soc_sup_2 + copsoq_soc_sup_3 + copsoq_soc_sup_4
+  sec =~ jis_1 + jis_2 + jis_3 + jis_4
+  ppr =~ ppqr_resources_13 + ppqr_resources_14 + ppqr_resources_15 + ppqr_resources_16 + ppqr_resources_17 + ppqr_resources_18
 
-  # Second-order factors
-  job_demands =~ WLD + PPA + PPS + AMB + CON + WLB
-  job_resources =~ OPP + MNG + INF + SOC + SEC + PPR
+  # serlcd-order factors
+  job_demands =~ wld + ppa + pps + rla + rlc + wlb
+  job_resources =~ opp + mng + inf + soc + sec + ppr
 '
 
 jdr_fit <- cfa(
@@ -240,7 +213,7 @@ jdr_fit <- cfa(
 
 stdsol <- standardizedSolution(jdr_fit)
 
-# Extract second-order loadings for job demands
+# Extract serlcd-order loadings for job demands
 load_dem <- subset(stdsol, lhs == "job_demands" & op == "=~")[, "est.std"]
 
 # Extract residual variances of first-order factors
@@ -248,13 +221,13 @@ resid_dem <- subset(stdsol, lhs == "job_demands" & op == "~~" & rhs != lhs)[, "e
 
 r2_vals <- inspect(jdr_fit, "r2")
 
-resid_dem <- 1 - r2_vals[c("WLD", "PPA", "PPS", "AMB", "CON", "WLB")]
+resid_dem <- 1 - r2_vals[c("wld", "ppa", "pps", "rla", "rlc", "wlb")]
 
 AVE_dem <- sum(load_dem^2) / (sum(load_dem^2) + sum(resid_dem))
 AVE_dem
 
 load_res <- subset(stdsol, lhs == "job_resources" & op == "=~")[, "est.std"]
-resid_res <- 1 - r2_vals[c("OPP", "MNG", "INF", "SOC", "SEC", "PPR")]
+resid_res <- 1 - r2_vals[c("opp", "mng", "inf", "soc", "sec", "ppr")]
 
 AVE_res <- sum(load_res^2) / (sum(load_res^2) + sum(resid_res))
 AVE_res
@@ -264,67 +237,6 @@ htmt(jdr_fit)
 ```
 
 # Assumptions for the models
-
-### Normality
-
-```{r}
-data_normality = data |> 
-  dplyr::select(burnout:WLB, -open_practice, -qrp_attitude) |>
-  mutate(across(everything(), ~ as.numeric(.x)))
-
-mvn(data_normality, mvn_test = "mardia", univariate_test = "SW")
-  
-
-# Use robust ML estimation
-# estimator = "MLM" or "MLMV" or "MLR"
-# se="robust.sem"
-```
-
-### Linearity assumption check
-
-```{r}
-linearity_data <- data_normality |>
-  dplyr::mutate(
-    job_demands_total = rowMeans(dplyr::select(cur_data(), WLD, PPA, PPS, AMB, CON, WLB), na.rm = TRUE),
-    job_resources_total = rowMeans(dplyr::select(cur_data(), OPP, MNG, INF, SOC, PAY, TOL, PPR, GNL, SEC), na.rm = TRUE),
-    burnout_total = burnout
-  )
-
-
-ggplot(linearity_data, aes(x = job_demands_total, y = burnout_total)) +
-  geom_point() + geom_smooth(method = "loess") + ggtitle("Job Demands → Burnout")
-
-ggplot(linearity_data, aes(x = job_resources_total, y = burnout_total)) +
-  geom_point() + geom_smooth(method = "loess") + ggtitle("Job Resources → Burnout")
-
-job_demand_items <- c("WLD", "PPA", "PPS", "AMB", "CON", "WLB")
-for(item in job_demand_items) {
-  print(
-    ggplot(linearity_data, aes_string(x = "job_demands_total", y = item)) +
-      geom_point() + geom_smooth(method = "loess") +
-      ggtitle(paste(item, "vs Job Demands"))
-  )
-}
-
-job_resource_items <- c("OPP", "MNG", "INF", "SOC", "PAY", "TOL", "PPR", "GNL", "SEC")
-for(item in job_resource_items) {
-  print(
-    ggplot(linearity_data, aes_string(x = "job_resources_total", y = item)) +
-      geom_point() + geom_smooth(method = "loess") +
-      ggtitle(paste(item, "vs Job Resources"))
-  )
-}
-
-lm1 <- lm(burnout_total ~ job_demands_total + job_resources_total, data = linearity_data)
-plot(lm1, which = 1)
-plot(lm1, which = 2)
-
-lm_quad <- lm(burnout_total ~ job_demands_total + I(job_demands_total^2) + job_resources_total + I(job_resources_total^2),
-              data = linearity_data)
-anova(lm1, lm_quad)
-
-# Linearity assumption appears to be met
-```
 
 ### Multicollinearity
 
@@ -340,7 +252,7 @@ correlation_matrix_filtered <- as.data.frame(correlation_matrix_filtered)
 correlation_matrix_filtered
 
 
-lm_vif <- lm(burnout ~ WLD + PPA + PPS + AMB + CON + WLB + OPP + MNG + INF + SOC + PAY + TOL + PPR + GNL + SEC, data = linearity_data)
+lm_vif <- lm(burnout ~ wld + ppa + pps + rla + rlc + wlb + opp + mng + inf + soc + pay + tol + ppr + gnl + sec, data = linearity_data)
 vif(lm_vif)
 
 lm_vif_structural <- lm(burnout_total ~ job_demands_total + job_resources_total, data = linearity_data)
@@ -386,16 +298,17 @@ modindices(fit_no_outlier, sort = TRUE)
 ```{r}
 write.csv(data_no_outliers, here::here("data/processed/data_no_outliers.csv"), row.names = FALSE)
 
+# ppa also removed
 jdr_final_model = '
   # Measurement model
-  job_demands =~ WLD + PPA + PPS + AMB + CON + WLB
-  job_resources =~ OPP + MNG + INF + SOC + PPR + SEC
+  job_demands =~ wld + pps + rla + rlc + wlb
+  job_resources =~ opp + mng + inf + soc + ppr + sec
   
   # Residual correlations
-  AMB ~~ CON
+  rla ~~ rlc
   
   # Structural model
-  burnout ~ job_demands + job_resources
+  brt ~ job_demands + job_resources
   '
 
 jdr_final_fit = sem(jdr_final_model, data = data_no_outliers, std.lv = TRUE, estimator = "MLR")
@@ -403,11 +316,12 @@ jdr_final_fit = sem(jdr_final_model, data = data_no_outliers, std.lv = TRUE, est
 summary(jdr_final_fit, fit.measures = TRUE, standardized = TRUE, modindices = TRUE, rsquare = TRUE)
 modindices(jdr_final_fit, sort = TRUE)
 
-# Calculating power of final model
-library(lavaan)
-library(dplyr)
-library(purrr)
 
+```
+
+# Calculating power of final model
+
+```{r}
 Sigma <- lavInspect(jdr_final_fit, "cov.ov")
 mu <- lavInspect(jdr_final_fit, "mean.ov")
 vars <- names(mu)
@@ -421,7 +335,7 @@ posthoc_power <- function(nobs = nrow(data_no_outliers), n_sim = 1000, alpha = 0
     
     est <- parameterEstimates(sim_fit)
     paths <- est %>%
-      filter(op == "~", lhs == "burnout", rhs %in% c("job_demands", "job_resources")) %>%
+      filter(op == "~", lhs == "brt", rhs %in% c("job_demands", "job_resources")) %>%
       pull(pvalue)
     
     paths < alpha  
@@ -482,6 +396,7 @@ power_results %>%
 
 ```
 
+
 # Estimating power for the main SEM model
 
 ```{r}
@@ -521,24 +436,5 @@ inspect(jdr_b_fit, "std.all")
 ### Effects of interest: burnout ~ job demands, burnout ~ job resources
 ### Minimum sample size for 0.80 power is 450
 ### Lowest power estimation was for burnout ~ job resources (0.80)
-
-```
-
-# Testing common method variance
-
-```{r}
-library(psych)
-all_items = data[, c("burnout",
-              "WLD", "PPA", "PPS", "AMB", "CON", "WLB",
-              "OPP", "MNG", "INF", "SOC", "PAY", "TOL", "PPR", "GNL", "SEC")]
-
-harman_1f <- fa(all_items,
-                nfactors = 1,
-                rotate = "none",
-                fm = "pa")   # principal axis factoring (recommended)
-
-print(harman_1f)
-harman_1f$Vaccounted
-
 
 ```
