@@ -28,14 +28,15 @@ if (identical(names(raw_data_01), names(raw_data_02))) {
 }
 
 raw_data = raw_data_01 |> 
-  bind_rows(raw_data_02)
+  bind_rows(raw_data_02) %>% 
+  dplyr::select(-open_time)
 ```
 
 ### Filtering out irrelevant data for analysis
 
 ```{r}
 raw_data_filtered = raw_data |> 
-  select(-StartDate, 
+  dplyr::select(-StartDate, 
          -EndDate,
          -Status,
          -Duration..in.seconds.,
@@ -46,7 +47,7 @@ raw_data_filtered = raw_data |>
          -DistributionChannel)
 
 meta_data = raw_data |> 
-  select(StartDate, 
+  dplyr::select(StartDate, 
          EndDate,
          Status,
          Duration..in.seconds.,
@@ -57,24 +58,41 @@ meta_data = raw_data |>
          DistributionChannel)
 ```
 
-### Creating codebook
+### Creating notebook
 
 ```{r}
-raw_data_filtered_codebook = raw_data_filtered[1, , drop = FALSE]
+codebook = raw_data_filtered[1, , drop = FALSE]
+codebook = codebook |> 
+  pivot_longer(everything(), names_to = "variable", values_to = "description") %>% 
+  separate(
+    col = description,
+    into = c("context", "question"),
+    sep = " - "
+  )
 ```
 
 ### Unifying syntax
 
 ```{r}
-raw_data_filtered = raw_data_filtered |> 
+raw_data_unified = raw_data_filtered |> 
   rename_with(tolower) |> 
   slice(-c(1, 2))
 ```
 
-### Checking for invalid data
+### Checking for exclusion criteria
 
 ```{r}
-participant_data = raw_data_filtered |> 
+# Removing participants based on exclusion criteria
+raw_data_valid = raw_data_unified %>%  
+  filter(finished == "True") %>%  
+  filter(consent == "Yes") %>%  
+  filter(academic_yes_no == "Yes") %>%  
+  filter(research_yes_no == "Yes") %>% 
+  dplyr::select(-finished, -consent, -academic_yes_no, -research_yes_no)
+
+
+# Counting valid responses
+valid_respones = raw_data_unified %>%  
   summarize(n_all = n(),
             n_finished = sum(finished == "True"),
             n_consent = sum(consent == "Yes"),
@@ -82,15 +100,11 @@ participant_data = raw_data_filtered |>
             n_research = sum(research_yes_no == "Yes"))
 ```
 
-### Creation of anonym id and dropping unnecessary columns
+### Creation of anonym id
 
 ```{r}
-raw_data_filtered = raw_data_filtered |> 
-  mutate(anonym_id = row_number()) |> 
-  mutate(finished = ifelse(finished == "True", T, F),
-         consent = ifelse(consent == "Yes", T, F),
-         academic_yes_no = ifelse(academic_yes_no == "Yes", T, F),
-         research_yes_no = ifelse(research_yes_no == "Yes", T, F))
+raw_data_anonymized = raw_data_valid %>%  
+  mutate(anonym_id = row_number()) 
 ```
 
 ### Locate attention check questions
@@ -99,24 +113,27 @@ raw_data_filtered = raw_data_filtered |>
 #For copsoq_wokload_5, "Rarely" is the correct answer
 #For attention_2, "Strongly agree" is the correct answer
 
-attention_check = raw_data_filtered |> 
-  select(copsoq_workload_5, attention_2, anonym_id)
+raw_data_attention = raw_data_anonymized |> 
+  rename(attention_1 = copsoq_workload_5) |>
+  dplyr::select(attention_1, attention_2, anonym_id)
 
-attention_check = attention_check |> 
-  mutate(copsoq_workload_5 = if_else(copsoq_workload_5 == "Rarely", 1, 0),
+attention_check = raw_data_attention |> 
+  mutate(attention_1 = if_else(attention_1 == "Rarely", 1, 0),
          attention_2 = if_else(attention_2 == "Strongly agree", 1, 0)) |> 
-  mutate(attention = ifelse(copsoq_workload_5 == 0 & attention_2 == 0, "Failed", "Passed")) |> 
-  select(attention, anonym_id)
+  mutate(attention = ifelse(attention_1 == 0 & attention_2 == 0, "Failed", "Passed")) |> 
+  dplyr::select(attention, anonym_id)
 
-raw_data_filtered_valid = raw_data_filtered |> 
-  left_join(attention_check, by = "anonym_id")
+raw_data_valid = raw_data_anonymized |> 
+  left_join(attention_check, by = "anonym_id") %>% 
+  filter(attention != "Failed") %>% 
+  dplyr::select(-copsoq_workload_5, -attention_2, -attention)
 ```
 
 # Saving data
 
 ```{r}
-write.csv(raw_data_filtered_valid, here::here("data/processed/raw_to_clean_data.csv"), row.names = FALSE)
-write.csv(raw_data_filtered_codebook, here::here("data/processed/codebook.csv"), row.names = FALSE)
+write.csv(raw_data_valid, here::here("data/processed/raw_to_clean_data.csv"), row.names = FALSE)
+write.csv(codebook, here::here("data/processed/codebook.csv"), row.names = FALSE)
 write.csv(meta_data, here::here("data/processed/meta_data.csv"), row.names = FALSE)
-write.csv(participant_data, here::here("data/processed/participant_checks.csv"), row.names = FALSE)
+write.csv(valid_respones, here::here("data/processed/participant_checks.csv"), row.names = FALSE)
 ```

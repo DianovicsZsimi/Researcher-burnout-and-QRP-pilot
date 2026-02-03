@@ -22,98 +22,162 @@ clean_data <- read_csv(here::here("data/processed/raw_to_clean_data.csv"))
 codebook = read_csv(here::here("data/processed/codebook.csv"))
 ```
 
+### Rename columns based on three letter abbreviations
+
+```{r}
+renamed_data <- clean_data %>%
+  dplyr::rename_with(
+    ~ gsub("^bat_", "brt_", .x),
+    .cols = starts_with("bat_")
+  ) %>% 
+  dplyr::rename_with(
+    ~ gsub("^ppqr_", "pp_", .x),
+    .cols = starts_with("ppqr_")
+  ) %>% 
+  dplyr::rename_with(
+    ~ gsub("^jis_", "sec_", .x),
+    .cols = starts_with("jis_")
+  ) %>% 
+  dplyr::rename_with(
+    ~ gsub("^wlbm_", "wlb_", .x),
+    .cols = starts_with("wlbm_")
+  ) %>% 
+  dplyr::rename_with(
+    ~ gsub("^copsoq_workload_", "wld_", .x),
+    .cols = starts_with("copsoq_workload_")
+  ) %>% 
+  dplyr::rename_with(
+    ~ gsub("^copsoq_soc_sup_", "soc_", .x),
+    .cols = starts_with("copsoq_soc_sup_")
+  ) %>% 
+  dplyr::rename_with(
+    ~ gsub("^copsoq_oppor_", "opp_", .x),
+    .cols = starts_with("copsoq_oppor_")
+  ) %>% 
+  dplyr::rename_with(
+    ~ gsub("^qrp_attitude_", "qrp_", .x),
+    .cols = starts_with("qrp_attitude_")
+  ) %>% 
+  dplyr::rename_with(
+    ~ gsub("^copsoq_infl_", "inf_", .x),
+    .cols = starts_with("copsoq_infl_")
+  ) %>% 
+  dplyr::rename_with(
+    ~ gsub("^copsoq_meaning_", "mng_", .x),
+    .cols = starts_with("copsoq_meaning_")
+  ) %>% 
+  dplyr::rename_with(
+    ~ gsub("^role_ambiguity_", "rl_", .x),
+    .cols = starts_with("role_ambiguity_")
+  ) %>% 
+  dplyr::rename_with(
+    ~ gsub("^pay_satisfaction_", "pay_", .x),
+    .cols = starts_with("pay_satisfaction_")
+  ) %>% 
+  dplyr::rename_with(
+    ~ gsub("^tool_satisfaction_", "tol_", .x),
+    .cols = starts_with("tool_satisfaction_")
+  ) %>% 
+  dplyr::rename_with(
+    ~ gsub("^general_satisfaction_", "gnl_", .x),
+    .cols = starts_with("general_satisfaction_")
+  )
+    
+
+```
+
 ### Change responses from string to integer for Burnout Assessment Tool (BAT) questions
 
 ```{r}
-burnout_columns = c("bat_1", "bat_2", "bat_3", "bat_4")
-burnout_data = clean_data |> 
-  select(bat_1, bat_2, bat_3, bat_4, anonym_id)
+burnout_columns = c("brt_1", "brt_2", "brt_3", "brt_4")
+burnout_data = renamed_data |> 
+  dplyr::select(brt_1, brt_2, brt_3, brt_4, anonym_id)
 
 for (column in burnout_columns) {
   burnout_data[[column]] = case_when(
-    clean_data[[column]] == "Never" ~ 1,
-    clean_data[[column]] == "Rarely" ~ 2,
-    clean_data[[column]] == "Sometimes" ~ 3,
-    clean_data[[column]] == "Often" ~ 4,
-    clean_data[[column]] == "Always" ~ 5
+    renamed_data[[column]] == "Never" ~ 1,
+    renamed_data[[column]] == "Rarely" ~ 2,
+    renamed_data[[column]] == "Sometimes" ~ 3,
+    renamed_data[[column]] == "Often" ~ 4,
+    renamed_data[[column]] == "Always" ~ 5
   )
 }
 
 #No reverse coded items
 ```
 
-### Change responses from string to integer for Publication Pressure Questionnaire Revised (PPQR) questions
+### Change responses from string to integer for Publication Pressure Questionnaire Revised (pp) questions
 
 ```{r}
-ppqr_data = clean_data |> 
-  select(contains("ppqr"), anonym_id)
+pp_data = renamed_data |> 
+  dplyr::select(contains("pp"), anonym_id)
 
-ppqr_columns = ppqr_data |> 
-  select(contains("ppqr")) |> 
+pp_columns = pp_data |> 
+  dplyr::select(contains("pp")) |> 
   colnames()
 
 
-for (column in ppqr_columns) {
-  ppqr_data[[column]] = case_when(
-    clean_data[[column]] == "Strongly disagree" ~ 1,
-    clean_data[[column]] == "Disagree" ~ 2,
-    clean_data[[column]] == "Neither agree nor disagree" ~ 3,
-    clean_data[[column]] == "Agree" ~ 4,
-    clean_data[[column]] == "Strongly agree" ~ 5
+for (column in pp_columns) {
+  pp_data[[column]] = case_when(
+    renamed_data[[column]] == "Strongly disagree" ~ 1,
+    renamed_data[[column]] == "Disagree" ~ 2,
+    renamed_data[[column]] == "Neither agree nor disagree" ~ 3,
+    renamed_data[[column]] == "Agree" ~ 4,
+    renamed_data[[column]] == "Strongly agree" ~ 5
   )
 }
 
-ppqr_stress_subscale = ppqr_data |> 
-  select(ppqr_1:ppqr_6, anonym_id) |> 
-  rename_with(~str_replace(., "ppqr", "ppqr_stress"))
+pp_stress_subscale = pp_data |> 
+  dplyr::select(pp_1:pp_6, anonym_id) |> 
+  rename_with(~str_replace(., "pp", "pps"))
 
-ppqr_attitude_subscale = ppqr_data |> 
-  select(ppqr_7:ppqr_12, anonym_id) |> 
-  rename_with(~str_replace(., "ppqr", "ppqr_attitude"))
+pp_attitude_subscale = pp_data |> 
+  dplyr::select(pp_7:pp_12, anonym_id) |> 
+  rename_with(~str_replace(., "pp", "ppa"))
 
-ppqr_resources_subscale = ppqr_data |> 
-  select(ppqr_13:ppqr_18, anonym_id) |> 
-  rename_with(~str_replace(., "ppqr", "ppqr_resources"))
+pp_resources_subscale = pp_data |> 
+  dplyr::select(pp_13:pp_18, anonym_id) |> 
+  rename_with(~str_replace(., "pp", "ppr"))
 
 #Reverse coded items for stress: 5, 6; for attitude: 11; resources: 16, 17
 
-reverse_ppqr_stress_columns = c("ppqr_stress_5", "ppqr_stress_6")
-reverse_ppqr_attitude_columns = c("ppqr_attitude_11")
-reverse_ppqr_resources_columns = c("ppqr_resources_16", "ppqr_resources_17")
+reverse_pp_stress_columns = c("pps_5", "pps_6")
+reverse_pp_attitude_columns = c("ppa_11")
+reverse_pp_resources_columns = c("ppr_16", "ppr_17")
 
-ppqr_stress_data_reversed = ppqr_stress_subscale
+pp_stress_data_reversed = pp_stress_subscale
 
-for (col in reverse_ppqr_stress_columns) {
-  ppqr_stress_data_reversed[[col]] = case_when(
-    ppqr_stress_data_reversed[[col]] == 1 ~ 5,
-    ppqr_stress_data_reversed[[col]] == 2 ~ 4,
-    ppqr_stress_data_reversed[[col]] == 3 ~ 3,
-    ppqr_stress_data_reversed[[col]] == 4 ~ 2,
-    ppqr_stress_data_reversed[[col]] == 5 ~ 1
+for (col in reverse_pp_stress_columns) {
+  pp_stress_data_reversed[[col]] = case_when(
+    pp_stress_data_reversed[[col]] == 1 ~ 5,
+    pp_stress_data_reversed[[col]] == 2 ~ 4,
+    pp_stress_data_reversed[[col]] == 3 ~ 3,
+    pp_stress_data_reversed[[col]] == 4 ~ 2,
+    pp_stress_data_reversed[[col]] == 5 ~ 1
   )
 }
 
-ppqr_attitude_data_reversed = ppqr_attitude_subscale
+pp_attitude_data_reversed = pp_attitude_subscale
 
-for (col in reverse_ppqr_attitude_columns) {
-  ppqr_attitude_data_reversed[[col]] = case_when(
-    ppqr_attitude_data_reversed[[col]] == 1 ~ 5,
-    ppqr_attitude_data_reversed[[col]] == 2 ~ 4,
-    ppqr_attitude_data_reversed[[col]] == 3 ~ 3,
-    ppqr_attitude_data_reversed[[col]] == 4 ~ 2,
-    ppqr_attitude_data_reversed[[col]] == 5 ~ 1
+for (col in reverse_pp_attitude_columns) {
+  pp_attitude_data_reversed[[col]] = case_when(
+    pp_attitude_data_reversed[[col]] == 1 ~ 5,
+    pp_attitude_data_reversed[[col]] == 2 ~ 4,
+    pp_attitude_data_reversed[[col]] == 3 ~ 3,
+    pp_attitude_data_reversed[[col]] == 4 ~ 2,
+    pp_attitude_data_reversed[[col]] == 5 ~ 1
   )
 }
 
-ppqr_resources_data_reversed = ppqr_resources_subscale
+pp_resources_data_reversed = pp_resources_subscale
 
-for (col in reverse_ppqr_resources_columns) {
-  ppqr_resources_data_reversed[[col]] = case_when(
-    ppqr_resources_data_reversed[[col]] == 1 ~ 5,
-    ppqr_resources_data_reversed[[col]] == 2 ~ 4,
-    ppqr_resources_data_reversed[[col]] == 3 ~ 3,
-    ppqr_resources_data_reversed[[col]] == 4 ~ 2,
-    ppqr_resources_data_reversed[[col]] == 5 ~ 1
+for (col in reverse_pp_resources_columns) {
+  pp_resources_data_reversed[[col]] = case_when(
+    pp_resources_data_reversed[[col]] == 1 ~ 5,
+    pp_resources_data_reversed[[col]] == 2 ~ 4,
+    pp_resources_data_reversed[[col]] == 3 ~ 3,
+    pp_resources_data_reversed[[col]] == 4 ~ 2,
+    pp_resources_data_reversed[[col]] == 5 ~ 1
   )
 }
 ```
@@ -121,27 +185,27 @@ for (col in reverse_ppqr_resources_columns) {
 ### Change responses from string to integer for Job Insecurity Scale (JIS) questions
 
 ```{r}
-jis_data = clean_data |> 
-  select(contains("jis"), anonym_id)
+jis_data = renamed_data |> 
+  dplyr::select(contains("sec"), anonym_id)
 
 jis_columns = jis_data |> 
-  select(contains("jis")) |> 
+  dplyr::select(contains("sec")) |> 
   colnames()
 
 
 for (column in jis_columns) {
   jis_data[[column]] = case_when(
-    clean_data[[column]] == "Strongly disagree" ~ 1,
-    clean_data[[column]] == "Somewhat disagree" ~ 2,
-    clean_data[[column]] == "Neither agree nor disagree" ~ 3,
-    clean_data[[column]] == "Somewhat agree" ~ 4,
-    clean_data[[column]] == "Strongly agree" ~ 5
+    renamed_data[[column]] == "Strongly disagree" ~ 1,
+    renamed_data[[column]] == "Somewhat disagree" ~ 2,
+    renamed_data[[column]] == "Neither agree nor disagree" ~ 3,
+    renamed_data[[column]] == "Somewhat agree" ~ 4,
+    renamed_data[[column]] == "Strongly agree" ~ 5
   )
 }
 
 #Reverse coded items: jis_2 --> jis_1, jis_3, jis_4
 #Wrong recoding direction: The higher the score, the higher job security should be, so the job resources latent variable is consistent
-reverse_jis_columns = c("jis_1", "jis_3", "jis_4")
+reverse_jis_columns = c("sec_1", "sec_3", "sec_4")
 
 jis_data_reversed = jis_data
 
@@ -156,39 +220,39 @@ for (col in reverse_jis_columns) {
 }
 ```
 
-### Change responses from string to integer for Work-life balance measure (WLBM) questions
+### Change responses from string to integer for Work-life balance measure (wlb) questions
 
 ```{r}
-wlbm_data = clean_data |> 
-  select(contains("wlbm"), anonym_id)
+wlb_data = renamed_data |> 
+  dplyr::select(contains("wlb"), anonym_id)
 
-wlbm_columns = wlbm_data |> 
-  select(contains("wlbm")) |> 
+wlb_columns = wlb_data |> 
+  dplyr::select(contains("wlb")) |> 
   colnames()
 
-for (column in wlbm_columns) {
-  wlbm_data[[column]] = case_when(
-    clean_data[[column]] == "Strongly disagree" ~ 1,
-    clean_data[[column]] == "Somewhat disagree" ~ 2,
-    clean_data[[column]] == "Neither agree nor disagree" ~ 3,
-    clean_data[[column]] == "Somewhat agree" ~ 4,
-    clean_data[[column]] == "Strongly agree" ~ 5
+for (column in wlb_columns) {
+  wlb_data[[column]] = case_when(
+    renamed_data[[column]] == "Strongly disagree" ~ 1,
+    renamed_data[[column]] == "Somewhat disagree" ~ 2,
+    renamed_data[[column]] == "Neither agree nor disagree" ~ 3,
+    renamed_data[[column]] == "Somewhat agree" ~ 4,
+    renamed_data[[column]] == "Strongly agree" ~ 5
   )
 }
 
-#Reverse coded item: wlbm_2 --> wlbm_1, wlbm_3, wlbm_4
+#Reverse coded item: wlb_2 --> wlb_1, wlb_3, wlb_4
 #Wrong recoding direction: The higher the score, the higher work life imbalance should be, so the job demands latent variable is consistent
-reverse_wlbm_columns = c("wlbm_1", "wlbm_3", "wlbm_4")
+reverse_wlb_columns = c("wlb_1", "wlb_3", "wlb_4")
 
-wlbm_data_reversed = wlbm_data
+wlb_data_reversed = wlb_data
 
-for (col in reverse_wlbm_columns) {
-  wlbm_data_reversed[[col]] = case_when(
-    wlbm_data_reversed[[col]] == 1 ~ 5,
-    wlbm_data_reversed[[col]] == 2 ~ 4,
-    wlbm_data_reversed[[col]] == 3 ~ 3,
-    wlbm_data_reversed[[col]] == 4 ~ 2,
-    wlbm_data_reversed[[col]] == 5 ~ 1
+for (col in reverse_wlb_columns) {
+  wlb_data_reversed[[col]] = case_when(
+    wlb_data_reversed[[col]] == 1 ~ 5,
+    wlb_data_reversed[[col]] == 2 ~ 4,
+    wlb_data_reversed[[col]] == 3 ~ 3,
+    wlb_data_reversed[[col]] == 4 ~ 2,
+    wlb_data_reversed[[col]] == 5 ~ 1
   )
 }
 ```
@@ -196,56 +260,53 @@ for (col in reverse_wlbm_columns) {
 ### Change responses from string to integer for Copenhagen Psychosocial Questionnaire workload (COPSOQ-workload) questions
 
 ```{r}
-workload_data = clean_data |> 
-  select(contains("copsoq_workload"), anonym_id) |> 
-  select(-copsoq_workload_5)
-
-#Copsoq workload 5 is an attention check question
+workload_data = renamed_data |> 
+  dplyr::select(contains("wld"), anonym_id)
 
 workload_columns = workload_data |> 
-  select(contains("copsoq_workload")) |> 
+  dplyr::select(contains("wld")) |> 
   colnames()
 
 for (column in workload_columns) {
   workload_data[[column]] = case_when(
-    clean_data[[column]] == "Never" ~ 1,
-    clean_data[[column]] == "Rarely" ~ 2,
-    clean_data[[column]] == "Sometimes" ~ 3,
-    clean_data[[column]] == "Often" ~ 4,
-    clean_data[[column]] == "Always" ~ 5
+    renamed_data[[column]] == "Never" ~ 1,
+    renamed_data[[column]] == "Rarely" ~ 2,
+    renamed_data[[column]] == "Sometimes" ~ 3,
+    renamed_data[[column]] == "Often" ~ 4,
+    renamed_data[[column]] == "Always" ~ 5
   )
 }
 
-#Reverse coded item: copsoq_workload_4
+#Reverse coded item: wld_4
 
 workload_data_reversed = workload_data |> 
-  mutate(copsoq_workload_4 = case_when(
-    copsoq_workload_4 == 1 ~ 5,
-    copsoq_workload_4 == 2 ~ 4,
-    copsoq_workload_4 == 3 ~ 3,
-    copsoq_workload_4 == 4 ~ 2,
-    copsoq_workload_4 == 5 ~ 1
+  mutate(wld_4 = case_when(
+    wld_4 == 1 ~ 5,
+    wld_4 == 2 ~ 4,
+    wld_4 == 3 ~ 3,
+    wld_4 == 4 ~ 2,
+    wld_4 == 5 ~ 1
   ))
 ```
 
 ### Change responses from string to integer for Copenhagen Psychosocial Questionnaire Social Support (COPSOQ-social-support) questions
 
 ```{r}
-soc_support_data = clean_data |> 
-  select(contains("copsoq_soc_sup"), anonym_id)
+soc_support_data = renamed_data |> 
+  dplyr::select(contains("soc"), anonym_id)
 
 
 soc_support_columns = soc_support_data |> 
-  select(contains("copsoq_soc_sup")) |> 
+  dplyr::select(contains("soc")) |> 
   colnames()
 
 for (column in soc_support_columns) {
   soc_support_data[[column]] = case_when(
-    clean_data[[column]] == "Never" ~ 1,
-    clean_data[[column]] == "Rarely" ~ 2,
-    clean_data[[column]] == "Sometimes" ~ 3,
-    clean_data[[column]] == "Often" ~ 4,
-    clean_data[[column]] == "Always" ~ 5
+    renamed_data[[column]] == "Never" ~ 1,
+    renamed_data[[column]] == "Rarely" ~ 2,
+    renamed_data[[column]] == "Sometimes" ~ 3,
+    renamed_data[[column]] == "Often" ~ 4,
+    renamed_data[[column]] == "Always" ~ 5
   )
 }
 
@@ -255,20 +316,20 @@ for (column in soc_support_columns) {
 ### Change responses from string to integer for Copenhagen Psychosocial Questionnaire Opportunities (COPSOQ-opportunities) questions
 
 ```{r}
-opportunities_data = clean_data |> 
-  select(contains("copsoq_opp"), anonym_id)
+opportunities_data = renamed_data |> 
+  dplyr::select(contains("opp"), anonym_id)
 
 opportunities_columns = opportunities_data |> 
-  select(contains("copsoq_opp")) |> 
+  dplyr::select(contains("opp")) |> 
   colnames()
 
 for (column in opportunities_columns) {
   opportunities_data[[column]] = case_when(
-    clean_data[[column]] == "Never" ~ 1,
-    clean_data[[column]] == "Rarely" ~ 2,
-    clean_data[[column]] == "Sometimes" ~ 3,
-    clean_data[[column]] == "Often" ~ 4,
-    clean_data[[column]] == "Always" ~ 5
+    renamed_data[[column]] == "Never" ~ 1,
+    renamed_data[[column]] == "Rarely" ~ 2,
+    renamed_data[[column]] == "Sometimes" ~ 3,
+    renamed_data[[column]] == "Often" ~ 4,
+    renamed_data[[column]] == "Always" ~ 5
   )
 }
 
@@ -278,20 +339,20 @@ for (column in opportunities_columns) {
 ### Change responses from string to integer for Questionable Research Practice (QRP) questions
 
 ```{r}
-qrp_data = clean_data |> 
-  select(contains("qrp"), anonym_id)
+qrp_data = renamed_data |> 
+  dplyr::select(contains("qrp"), anonym_id)
 
 qrp_columns = qrp_data |> 
-  select(contains("qrp")) |> 
+  dplyr::select(contains("qrp")) |> 
   colnames()
 
 for (column in qrp_columns) {
   qrp_data[[column]] = case_when(
-    clean_data[[column]] == "Completely unacceptable" ~ 1,
-    clean_data[[column]] == "Somewhat unacceptable" ~ 2,
-    clean_data[[column]] == "Neither acceptable or unacceptable" ~ 3,
-    clean_data[[column]] == "Somewhat acceptable" ~ 4,
-    clean_data[[column]] == "Completely acceptable" ~ 5
+    renamed_data[[column]] == "Completely unacceptable" ~ 1,
+    renamed_data[[column]] == "Somewhat unacceptable" ~ 2,
+    renamed_data[[column]] == "Neither acceptable or unacceptable" ~ 3,
+    renamed_data[[column]] == "Somewhat acceptable" ~ 4,
+    renamed_data[[column]] == "Completely acceptable" ~ 5
   )
 }
 
@@ -301,20 +362,20 @@ for (column in qrp_columns) {
 ### Change responses from string to integer for Copenhagen Psychosocial Questionnaire Influence (COPSOQ-influence) questions
 
 ```{r}
-influence_data = clean_data |> 
-  select(contains("copsoq_inf"), anonym_id)
+influence_data = renamed_data |> 
+  dplyr::select(contains("inf"), anonym_id)
 
 influence_columns = influence_data |> 
-  select(contains("copsoq_inf")) |> 
+  dplyr::select(contains("inf")) |> 
   colnames()
 
 for (column in influence_columns) {
   influence_data[[column]] = case_when(
-    clean_data[[column]] == "Never" ~ 1,
-    clean_data[[column]] == "Rarely" ~ 2,
-    clean_data[[column]] == "Sometimes" ~ 3,
-    clean_data[[column]] == "Often" ~ 4,
-    clean_data[[column]] == "Always" ~ 5
+    renamed_data[[column]] == "Never" ~ 1,
+    renamed_data[[column]] == "Rarely" ~ 2,
+    renamed_data[[column]] == "Sometimes" ~ 3,
+    renamed_data[[column]] == "Often" ~ 4,
+    renamed_data[[column]] == "Always" ~ 5
   )
 }
 
@@ -324,20 +385,20 @@ for (column in influence_columns) {
 # Change responses from string to integer for Copenhagen Psychosocial Questionnaire Meaning (COPSOQ-Meaning) questions
 
 ```{r}
-meaning_data = clean_data |> 
-  select(contains("copsoq_mean"), anonym_id)
+meaning_data = renamed_data |> 
+  dplyr::select(contains("mng"), anonym_id)
 
 meaning_columns = meaning_data |> 
-  select(contains("copsoq_mean")) |> 
+  dplyr::select(contains("mng")) |> 
   colnames()
 
 for (column in meaning_columns) {
   meaning_data[[column]] = case_when(
-    clean_data[[column]] == "Never" ~ 1,
-    clean_data[[column]] == "Rarely" ~ 2,
-    clean_data[[column]] == "Sometimes" ~ 3,
-    clean_data[[column]] == "Often" ~ 4,
-    clean_data[[column]] == "Always" ~ 5
+    renamed_data[[column]] == "Never" ~ 1,
+    renamed_data[[column]] == "Rarely" ~ 2,
+    renamed_data[[column]] == "Sometimes" ~ 3,
+    renamed_data[[column]] == "Often" ~ 4,
+    renamed_data[[column]] == "Always" ~ 5
   )
 }
 
@@ -347,52 +408,33 @@ for (column in meaning_columns) {
 ### Change responses from string to integer for Role ambiguity and Role Conflict Scale (Role Ambiguity) questions
 
 ```{r}
-#Items have to be renamed first due to a mistake when importing to Qualtrics
-clean_data = clean_data |> 
-  rename(role_stressor_01 = role_ambiguity_9,
-         role_stressor_02 = role_ambiguity_5,
-         role_stressor_03 = role_ambiguity_10,
-         role_stressor_04 = role_ambiguity_6,
-         role_stressor_05 = role_ambiguity_1,
-         role_stressor_06 = role_ambiguity_4,
-         role_stressor_07 = role_ambiguity_2,
-         role_stressor_08 = role_ambiguity_7,
-         role_stressor_09 = role_ambiguity_12,
-         role_stressor_10 = role_ambiguity_3,
-         role_stressor_11 = role_ambiguity_11,
-         role_stressor_12 = role_ambiguity_8)
-  
-
-
-role_stressor_data = clean_data |> 
-  select(contains("role_stressor"), anonym_id)
-
-role_stressor_data = role_stressor_data |> 
-  select(order(colnames(role_stressor_data)))
+# FIX 
+role_stressor_data = renamed_data |> 
+  dplyr::select(contains("rl"), anonym_id)
 
 role_stressor_columns = role_stressor_data |> 
-  select(contains("role")) |> 
+  dplyr::select(contains("rl")) |> 
   colnames()
 
 for (column in role_stressor_columns) {
   role_stressor_data[[column]] = case_when(
-    clean_data[[column]] == "Strongly disagree" ~ 1,
-    clean_data[[column]] == "Disagree" ~ 2,
-    clean_data[[column]] == "Slightly disagree" ~ 3,
-    clean_data[[column]] == "Neither agree nor disagree" ~ 4,
-    clean_data[[column]] == "Slightly agree" ~ 5,
-    clean_data[[column]] == "Agree" ~ 6,
-    clean_data[[column]] == "Strongly agree" ~ 7
+    renamed_data[[column]] == "Strongly disagree" ~ 1,
+    renamed_data[[column]] == "Disagree" ~ 2,
+    renamed_data[[column]] == "Slightly disagree" ~ 3,
+    renamed_data[[column]] == "Neither agree nor disagree" ~ 4,
+    renamed_data[[column]] == "Slightly agree" ~ 5,
+    renamed_data[[column]] == "Agree" ~ 6,
+    renamed_data[[column]] == "Strongly agree" ~ 7
   )
 }
 
-#Reverse coded items: 4, 5, 6, 10, 11, 12 
-reverse_stresor_columns = c("role_stressor_04", "role_stressor_05", "role_stressor_06", 
-                              "role_stressor_10", "role_stressor_11", "role_stressor_12")
+#Reverse coded items: 1, 3, 4, 6, 8, 11 
+reverse_stressor_columns = c("rl_1", "rl_3", "rl_4", 
+                              "rl_6", "rl_8", "rl_11")
 
 role_stressor_data_reversed = role_stressor_data
 
-for (col in reverse_stresor_columns) {
+for (col in reverse_stressor_columns) {
   role_stressor_data_reversed[[col]] = case_when(
     role_stressor_data[[col]] == 1 ~ 7,
     role_stressor_data[[col]] == 2 ~ 6,
@@ -405,35 +447,46 @@ for (col in reverse_stresor_columns) {
 }
 
 role_ambiguity_data_reversed = role_stressor_data_reversed |> 
-  select(role_stressor_01:role_stressor_06, anonym_id) |> 
-  rename_with(~str_replace(., "role_stressor", "role_ambiguity"))
+  dplyr::select(rl_1, rl_4, rl_5, rl_6, rl_9, rl_10, anonym_id) |> 
+  rename_with(~str_replace(., "rl", "rla")) %>% 
+  rename(rla_1 = rla_1,
+         rla_2 = rla_4,
+         rla_3 = rla_5,
+         rla_4 = rla_6,
+         rla_5 = rla_9,
+         rla_6 = rla_10)
 
 role_conflict_data_reversed = role_stressor_data_reversed |> 
-  select(role_stressor_07:role_stressor_12, anonym_id) |> 
-  rename_with(~str_replace(., "role_stressor", "role_conflict"))
-
+  dplyr::select(rl_2, rl_3, rl_7, rl_8, rl_11, rl_12, anonym_id) |> 
+  rename_with(~str_replace(., "rl", "rlc")) %>% 
+  rename(rlc_1 = rlc_2,
+         rlc_2 = rlc_3,
+         rlc_3 = rlc_7,
+         rlc_4 = rlc_8,
+         rlc_5 = rlc_11,
+         rlc_6 = rlc_12)
 
 ```
 
 ### Change responses from string to integer for Pay Satisfaction questions
 
 ```{r}
-pay_satisfaction_data = clean_data |> 
-  select(contains("pay_satisfaction"), anonym_id)
+pay_satisfaction_data = renamed_data |> 
+  dplyr::select(contains("pay"), anonym_id)
 
 pay_satisfaction_columns = pay_satisfaction_data |>
-  select(contains("pay_satisfaction")) |>
+  dplyr::select(contains("pay")) |>
   colnames()
 
 for (column in pay_satisfaction_columns) {
   pay_satisfaction_data[[column]] = case_when(
-    clean_data[[column]] == "Very dissatisfied" ~ 1,
-    clean_data[[column]] == "Dissatisfied" ~ 2,
-    clean_data[[column]] == "Slightly dissatisfied" ~ 3,
-    clean_data[[column]] == "Neither satisfied nor dissatisfied" ~ 4,
-    clean_data[[column]] == "Slightly satisfied" ~ 5,
-    clean_data[[column]] == "Satisfied" ~ 6,
-    clean_data[[column]] == "Very satisfied" ~ 7
+    renamed_data[[column]] == "Very dissatisfied" ~ 1,
+    renamed_data[[column]] == "Dissatisfied" ~ 2,
+    renamed_data[[column]] == "Slightly dissatisfied" ~ 3,
+    renamed_data[[column]] == "Neither satisfied nor dissatisfied" ~ 4,
+    renamed_data[[column]] == "Slightly satisfied" ~ 5,
+    renamed_data[[column]] == "Satisfied" ~ 6,
+    renamed_data[[column]] == "Very satisfied" ~ 7
   )
 }
 
@@ -443,22 +496,22 @@ for (column in pay_satisfaction_columns) {
 ### Change responses from string to integer for Tool Satisfaction questions
 
 ```{r}
-tool_satisfaction_data = clean_data |> 
-  select(contains("tool_satisfaction"), anonym_id)
+tool_satisfaction_data = renamed_data |> 
+  dplyr::select(contains("tol"), anonym_id)
 
 tool_satisfaction_columns = tool_satisfaction_data |>
-  select(contains("tool_satisfaction")) |>
+  dplyr::select(contains("tol")) |>
   colnames()
 
 for (column in tool_satisfaction_columns) {
   tool_satisfaction_data[[column]] = case_when(
-    clean_data[[column]] == "Very dissatisfied" ~ 1,
-    clean_data[[column]] == "Dissatisfied" ~ 2,
-    clean_data[[column]] == "Slightly dissatisfied" ~ 3,
-    clean_data[[column]] == "Neither satisfied nor dissatisfied" ~ 4,
-    clean_data[[column]] == "Slightly satisfied" ~ 5,
-    clean_data[[column]] == "Satisfied" ~ 6,
-    clean_data[[column]] == "Very satisfied" ~ 7
+    renamed_data[[column]] == "Very dissatisfied" ~ 1,
+    renamed_data[[column]] == "Dissatisfied" ~ 2,
+    renamed_data[[column]] == "Slightly dissatisfied" ~ 3,
+    renamed_data[[column]] == "Neither satisfied nor dissatisfied" ~ 4,
+    renamed_data[[column]] == "Slightly satisfied" ~ 5,
+    renamed_data[[column]] == "Satisfied" ~ 6,
+    renamed_data[[column]] == "Very satisfied" ~ 7
   )
 }
 
@@ -468,81 +521,37 @@ for (column in tool_satisfaction_columns) {
 ### Change responses from string to integer for General Satisfaction questions
 
 ```{r}
-general_satisfaction_data = clean_data |> 
-  select(contains("general_satisfaction"), anonym_id)
+general_satisfaction_data = renamed_data |> 
+  dplyr::select(contains("gnl"), anonym_id)
 
 general_satisfaction_columns = general_satisfaction_data |>
-  select(contains("general_satisfaction")) |>
+  dplyr::select(contains("gnl")) |>
   colnames()
 
 for (column in general_satisfaction_columns) {
   general_satisfaction_data[[column]] = case_when(
-    clean_data[[column]] == "Very dissatisfied" ~ 1,
-    clean_data[[column]] == "Dissatisfied" ~ 2,
-    clean_data[[column]] == "Slightly dissatisfied" ~ 3,
-    clean_data[[column]] == "Neither satisfied nor dissatisfied" ~ 4,
-    clean_data[[column]] == "Slightly satisfied" ~ 5,
-    clean_data[[column]] == "Satisfied" ~ 6,
-    clean_data[[column]] == "Very satisfied" ~ 7
+    renamed_data[[column]] == "Very dissatisfied" ~ 1,
+    renamed_data[[column]] == "Dissatisfied" ~ 2,
+    renamed_data[[column]] == "Slightly dissatisfied" ~ 3,
+    renamed_data[[column]] == "Neither satisfied nor dissatisfied" ~ 4,
+    renamed_data[[column]] == "Slightly satisfied" ~ 5,
+    renamed_data[[column]] == "Satisfied" ~ 6,
+    renamed_data[[column]] == "Very satisfied" ~ 7
   )
 }
 
 #No reverse coded items
 ```
 
-### Change responses from string to integer for Open Research Practice (ORP) questions
-
-```{r}
-orp_data = clean_data |> 
-  select(open_time, anonym_id) |> 
-  mutate(open_practice =case_when(
-    open_time == "Agree" ~ 1,
-    open_time == "Disagree" ~ 0
-  )) |> 
-  select(-open_time)
-
-#No reverse coded items
-```
-
-### Creating script that checks for lazy responding
-
-```{r}
-before_reverse_coding = burnout_data |> 
-  left_join(ppqr_data, by = "anonym_id") |>
-  left_join(jis_data_reversed, by = "anonym_id") |>
-  left_join(wlbm_data_reversed, by = "anonym_id") |>
-  left_join(workload_data, by = "anonym_id") |>
-  left_join(soc_support_data, by = "anonym_id") |>
-  left_join(opportunities_data, by = "anonym_id") |>
-  left_join(qrp_data, by = "anonym_id") |>
-  left_join(influence_data, by = "anonym_id") |>
-  left_join(meaning_data, by = "anonym_id") |>
-  left_join(role_conflict_data_reversed, by = "anonym_id") |>
-  left_join(role_ambiguity_data_reversed, by = "anonym_id") |>
-  left_join(pay_satisfaction_data, by = "anonym_id") |>
-  left_join(tool_satisfaction_data, by = "anonym_id") |>
-  left_join(general_satisfaction_data, by = "anonym_id") |>
-  left_join(orp_data, by = "anonym_id")
-
-lazy_responding <- before_reverse_coding |> 
-  mutate(
-    anonym_id = as.character(anonym_id),
-    total_sum = rowSums(select(before_reverse_coding, where(is.numeric)), na.rm = TRUE),
-    lazy_responding = apply(before_reverse_coding, 1, function(row) all(row==row[2], na.rm = TRUE)),
-    anonym_id = as.integer(anonym_id)
-  ) |> 
-  relocate(any_of(c("anonym_id", "lazy_responding", "total_sum")), .before = bat_1)
-```
-
 ### Join datasets with identifiers
 
 ```{r}
 survey_data = burnout_data |> 
-  left_join(ppqr_stress_data_reversed, by = "anonym_id") |> 
-  left_join(ppqr_attitude_data_reversed, by = "anonym_id") |> 
-  left_join(ppqr_resources_data_reversed, by = "anonym_id") |> 
+  left_join(pp_stress_data_reversed, by = "anonym_id") |> 
+  left_join(pp_attitude_data_reversed, by = "anonym_id") |> 
+  left_join(pp_resources_data_reversed, by = "anonym_id") |> 
   left_join(jis_data_reversed, by = "anonym_id") |> 
-  left_join(wlbm_data_reversed, by = "anonym_id") |> 
+  left_join(wlb_data_reversed, by = "anonym_id") |> 
   left_join(workload_data_reversed, by = "anonym_id") |> 
   left_join(soc_support_data, by = "anonym_id") |> 
   left_join(opportunities_data, by = "anonym_id") |> 
@@ -553,32 +562,22 @@ survey_data = burnout_data |>
   left_join(role_conflict_data_reversed, by = "anonym_id") |> 
   left_join(pay_satisfaction_data, by = "anonym_id") |> 
   left_join(tool_satisfaction_data, by = "anonym_id") |> 
-  left_join(general_satisfaction_data, by = "anonym_id") |> 
-  left_join(orp_data, by = "anonym_id") |> 
-  relocate(anonym_id, .before = bat_1)
+  left_join(general_satisfaction_data, by = "anonym_id") %>% 
+  relocate(anonym_id, .before = brt_1)
 ```
 
 ### Save descriptive data in another dataframe
 
 ```{r}
-descriptive_data = clean_data |> 
-  select(anonym_id, gender:phd_dissertation)
-```
-
-### Save conditional data
-
-```{r}
-conditional_data = clean_data |> 
-  select(anonym_id, finished, research_yes_no, academic_yes_no, consent, attention) |> 
-  left_join(select(lazy_responding, anonym_id, lazy_responding), by = "anonym_id")
+descriptive_data = renamed_data |> 
+  dplyr::select(anonym_id, gender:phd_dissertation)
 ```
 
 ### Join descriptive and survey data
 
 ```{r}
 processed_data = survey_data |> 
-  left_join(descriptive_data, by = "anonym_id") |> 
-  left_join(conditional_data, by = "anonym_id")
+  left_join(descriptive_data, by = "anonym_id")
 ```
 
 ### Save data
