@@ -34,13 +34,13 @@ processed = read_csv(here::here("data/processed/aggregated_data.csv"))
 ```{r}
 # QRP removed
 
-items = c("brt_", "pps_", "ppa_", "ppr_", "wld_", "soc_",
+items = c("brt_", "wld_", "scs_", "scc_",
             "opp_", "wlb_", "sec_", "inf_", "mng_",
-            "rla_", "rlc_", "pay_", "tol_", "gnl_")
+            "rla_", "rlc_")
 
-surveys = c("brt", "pps", "ppa", "ppr", "wld", "soc",
+surveys = c("brt", "wld", "scs", "scc",
             "opp", "wlb", "sec", "inf", "mng",
-            "rla", "rlc", "pay", "tol", "gnl")
+            "rla", "rlc")
 ```
 
 ## Item-level analyses
@@ -99,9 +99,6 @@ omega_function <- function(data, item_prefix) {
   items_df <- data %>%
     dplyr::select(starts_with(item_prefix))
   
-   # remove items with zero variance
- # items_df <- items_df[, apply(items_df, 2, function(x) var(x, na.rm = TRUE) > 0), drop = FALSE]
-  
    if (ncol(items_df) < 3) {
     return(data.frame(
       item = item_prefix,
@@ -113,7 +110,8 @@ omega_function <- function(data, item_prefix) {
     items_df,
     nfactors = 1,
     fm = "pa",
-    plot = FALSE
+    plot = FALSE,
+    digits = 3
   )
 
   data.frame(
@@ -197,13 +195,11 @@ fit_single_factor_cfa <- function(data, survey_prefix) {
   
   items <- names(data)[startsWith(names(data), survey_prefix)]
   
-  # Safety check
   if (length(items) < 3) {
     warning(paste("Survey", survey_prefix, "has fewer than 3 items"))
     return(NULL)
   }
   
-  # Build CFA model string
   model <- paste0(
     "factor =~ ",
     paste(items, collapse = " + ")
@@ -267,13 +263,46 @@ ave_table <- map_df(
       mutate(survey = gsub("_", "", survey))
   }
 )
-
-
 ```
 
 ### Divergent validity
 
 ```{r}
+resources_first_order = '
+  opp =~ opp_1 + opp_2 + opp_3
+  mng =~ mng_1 + mng_2 
+  inf =~ inf_1 + inf_2 + inf_3 + inf_4 + inf_5 + inf_6
+  scs =~ scs_1 + scs_2 + scs_3 
+  scc =~ scc_1 + scc_2 + scc_3
+  sec =~ sec_1 + sec_2 + sec_3 + sec_4
+'
+
+demands_first_order = '
+  wld =~ wld_1 + wld_2 + wld_3 + wld_4
+  rla =~ rla_1 + rla_2 + rla_3 + rla_4 + rla_5 + rla_6
+  wlb =~ wlb_1 + wlb_2 + wlb_3 + wlb_4
+  rlc =~ rlc_1 + rlc_2 + rlc_3 + rlc_4 + rlc_5 + rlc_6
+'
+
+
+run_discriminant_validity <- function(model_syntax, cutoff = 0.7) {
+  fit <- cfa(
+    model_syntax,
+    data = processed,
+    check.lv.names = FALSE
+  )
+  
+  disc <- discriminantValidity(fit, cutoff = cutoff, level = 0.9)
+  
+  disc %>%
+    dplyr::select(lhs, rhs, est, ci.upper, "Pr(>Chisq)") %>%
+    dplyr::rename(p_value = "Pr(>Chisq)") %>%
+    dplyr::mutate(p_value = round(p_value, 3))
+}
+
+discriminant_validity_resources <- run_discriminant_validity(resources_first_order)
+discriminant_validity_demands <- run_discriminant_validity(demands_first_order)
+
 survey_to_item <- setNames(items, surveys)
 
 
@@ -313,8 +342,6 @@ multi_cfa_fit <- cfa(
 latent_correlations <- inspect(multi_cfa_fit, "cor.lv")
 latent_correlations
 
-htmt(multi_cfa_model, processed)
-
 # average variance extracted greater than shared variance
 
 # Creating AVE pairs
@@ -341,7 +368,6 @@ ave_pairs <- ave_pairs %>%
     ]^2,
     ave_greater = (ave1 > shared_variance) & (ave2 > shared_variance)
   )
-  
 ```
 
 ### Multicollinearity
@@ -355,11 +381,10 @@ correlation_matrix <- processed %>%
 correlation_matrix[abs(correlation_matrix) < 0.50] <- NA
 correlation_matrix <- as.data.frame(correlation_matrix)
 
-lm_vif <- lm(brt ~ wld + ppa + pps + rla + rlc + wlb + opp + mng + inf + soc + ppr + sec, data = processed)
+lm_vif <- lm(brt ~ wld + rla + rlc + wlb + opp + mng + inf + scs + scc + sec, data = processed)
 vif(lm_vif)
 
 # No multicollinearity issues detected (all correlations < 0.70)
-
 ```
 
 ### Linearity
@@ -367,8 +392,8 @@ vif(lm_vif)
 ```{r}
 linearity_data <- processed |>
   dplyr::mutate(
-    job_demands_total = rowMeans(dplyr::select(cur_data(), wld, ppa, pps, rla, rlc, wlb), na.rm = TRUE),
-    job_resources_total = rowMeans(dplyr::select(cur_data(), opp, mng, inf, soc, pay, tol, ppr, gnl, sec), na.rm = TRUE),
+    job_demands_total = rowMeans(dplyr::select(cur_data(), wld, rla, rlc, wlb), na.rm = TRUE),
+    job_resources_total = rowMeans(dplyr::select(cur_data(), opp, mng, inf, scs, scc, sec), na.rm = TRUE),
     burnout_total = brt
   )
 
@@ -378,7 +403,7 @@ ggplot(linearity_data, aes(x = job_demands_total, y = burnout_total)) +
 ggplot(linearity_data, aes(x = job_resources_total, y = burnout_total)) +
   geom_point() + geom_smooth(method = "loess") + ggtitle("Job Resources → Burnout")
 
-job_demand_items <- c("wld", "ppa", "pps", "rla", "rlc", "wlb")
+job_demand_items <- c("wld", "rla", "rlc", "wlb")
 for(item in job_demand_items) {
   print(
     ggplot(linearity_data, aes_string(x = "job_demands_total", y = item)) +
@@ -387,7 +412,7 @@ for(item in job_demand_items) {
   )
 }
 
-job_resource_items <- c("opp", "mng", "inf", "soc", "pay", "tol", "ppr", "gnl", "sec")
+job_resource_items <- c("opp", "mng", "inf", "scs", "scc", "sec")
 for(item in job_resource_items) {
   print(
     ggplot(linearity_data, aes_string(x = "job_resources_total", y = item)) +
@@ -406,10 +431,9 @@ plot(lm1, which = 2)
 ### Underperforming constructs
 
 ```{r}
-underperforming_scales = c("pps", "ppr", "rlc")
+underperforming_scales = c("rlc")
 
 # Detailed CFA
-
 underperforming_cfa_results <- lapply(underperforming_scales, function(survey) {
   fit_single_factor_cfa(processed, paste0(survey, "_"))
 })
@@ -418,14 +442,7 @@ underperforming_cfa_results <- lapply(underperforming_scales, function(survey) {
 lapply(underperforming_cfa_results, function(x) summary(x$fit, fit.measures = TRUE, standardized = TRUE))
 lapply(underperforming_cfa_results, function(x) modificationIndices(x$fit, sort. = TRUE, maximum.number = 10))
 
-# Fit EFA for PPR and RLC (for PPS the parallel analysis suggested unidimensionality)
-
-ppr_fit_1 = efa(processed, ov.names = c("ppr_13", "ppr_14", "ppr_15", "ppr_16", "ppr_17", "ppr_18"), nfactors = 1, rotation = "oblimin")
-ppr_fit_2 = efa(processed, ov.names = c("ppr_13", "ppr_14", "ppr_15", "ppr_16", "ppr_17", "ppr_18"), nfactors = 2, rotation = "oblimin")
-summary(ppr_fit_1)
-summary(ppr_fit_2)
-fitMeasures(ppr_fit_1, "bic")
-fitMeasures(ppr_fit_2, "bic")
+# Fit EFA for  RLC
 
 rlc_fit_1 = efa(processed, ov.names = c("rlc_1", "rlc_2", "rlc_3", "rlc_4", "rlc_5", "rlc_6"), nfactors = 1, rotation = "oblimin")
 rlc_fit_2 = efa(processed, ov.names = c("rlc_1", "rlc_2", "rlc_3", "rlc_4", "rlc_5", "rlc_6"), nfactors = 2, rotation = "oblimin")
@@ -439,43 +456,94 @@ fitMeasures(rlc_fit_2, "bic")
 
 ## Construct- and factor-level analyses
 
-## Measurement model
+### Measurement model
 
 ```{r}
+# Excluding aggregated constructs
+
+jdr_measurement_items = processed %>% 
+  dplyr::select(starts_with(c(items)))
+
+
 jdr_measurement_model <- '
   # First-order factors
   wld =~ wld_1 + wld_2 + wld_3 + wld_4
-  ppa =~ ppa_7 + ppa_8 + ppa_9 + ppa_10 + ppa_11 + ppa_12
-  pps =~ pps_1 + pps_2 + pps_3 + pps_4 + pps_5 + pps_6
   rla =~ rla_1 + rla_2 + rla_3 + rla_4 + rla_5 + rla_6
-  rlc =~ rlc_1 + rlc_2 + rlc_3 + rlc_4 + rlc_5 + rlc_6
   wlb =~ wlb_1 + wlb_2 + wlb_3 + wlb_4
+  rlc =~ rlc_1 + rlc_2 + rlc_3 + rlc_4 + rlc_5 + rlc_6
   
   opp =~ opp_1 + opp_2 + opp_3
   mng =~ mng_1 + mng_2 
-  inf =~ inf_1 + inf_2 + inf_3 + inf_4
-  soc =~ soc_1 + soc_2 + soc_3 + soc_4
-  ppr =~ ppr_13 + ppr_14 + ppr_15 + ppr_16 + ppr_17 + ppr_18
+  inf =~ inf_1 + inf_2 + inf_3 + inf_4 + inf_5 + inf_6
+  scs =~ scs_1 + scs_2 + scs_3 
+  scc =~ scc_1 + scc_2 + scc_3
   sec =~ sec_1 + sec_2 + sec_3 + sec_4
-
-
+  
+  burnout =~ brt_1 + brt_2 + brt_3 + brt_4
+  
   # Job Demands
-  job_demands =~ wld + ppa + pps + rla + rlc + wlb
+  job_demands =~ wld + rla + wlb + rlc
 
   # Job Resources
-  job_resources =~ opp + mng + inf + soc + ppr + sec
-
-  # Burnout
-  burnout =~ brt
+  job_resources =~ opp + mng + inf + scs + scc + sec
+  
+  # Allowing latent factors to correlate
+  job_demands ~~ job_resources
+  
+  # burnout is regressed on job demands and job resources
+  burnout ~ job_demands + job_resources
+  
+  # Allowing theoretically related indicators and factors to correlate
+  scs ~~ scc
+  rla ~~ rlc
+  rla_5 ~~ rla_6
+  rlc_1 ~~ rlc_6
 '
 
-jdr_measurement_fit <- cfa(
+jdr_measurement_fit <- sem(
   jdr_measurement_model,
+  data = jdr_measurement_items,
+  estimator = "MLR",
+  std.lv = TRUE
+)
+
+summary(jdr_measurement_fit, fit.measures = TRUE, standardized = TRUE)
+
+inspect(jdr_measurement_fit, "cor.lv")
+
+modificationIndices(jdr_measurement_fit, sort. = TRUE, maximum.number = 10)
+
+```
+
+### Composite SEM
+
+```{r}
+jdr_composite_model <- '
+  # Job Demands
+  job_demands =~ wld + rla + wlb + rlc
+
+  # Job Resources
+  job_resources =~ opp + mng + inf + scs + scc + sec
+  
+  # Allowing latent factors to correlate
+  job_demands ~~ job_resources
+  
+  # burnout is regressed on job demands and job resources
+  brt ~ job_demands + job_resources
+  
+  # Allowing theoretically related indicators to correlate
+  rlc ~~ rla
+  scs ~~ scc
+'
+
+jdr_composite_fit <- sem(
+  jdr_composite_model,
   data = processed,
   estimator = "MLR",
   std.lv = TRUE
 )
-  
+
+summary(jdr_composite_fit, fit.measures = TRUE, standardized = TRUE)
 ```
 
 
@@ -483,8 +551,8 @@ jdr_measurement_fit <- cfa(
 
 ```{r}
 constructs = processed[, c("brt",
-              "wld", "ppa", "pps", "rla", "rlc", "wlb",
-              "opp", "mng", "inf", "soc", "ppr", "sec")]
+              "wld", "rla", "rlc", "wlb",
+              "opp", "mng", "inf", "scc", "scs", "sec")]
 
 harman_1f <- fa(constructs,
                 nfactors = 1,
@@ -497,40 +565,129 @@ harman_1f$Vaccounted
 ### Second-order reliability
 
 ```{r}
-semTools::compRelSEM(jdr_measurement_fit, higher = c("job_demands", "job_resources"))
+resources_factor =   '
+  # First-order factors
+  opp =~ opp_1 + opp_2 + opp_3
+  mng =~ mng_1 + mng_2 
+  inf =~ inf_1 + inf_2 + inf_3 + inf_4 + inf_5 + inf_6
+  scs =~ scs_1 + scs_2 + scs_3 
+  scc =~ scc_1 + scc_2 + scc_3
+  sec =~ sec_1 + sec_2 + sec_3 + sec_4
+
+  # Job Resources
+  job_resources =~ opp + mng + inf + scs + scc + sec
+'
+
+jdr_resources_fit <- sem(
+  resources_factor,
+  data = processed,
+  estimator = "MLR",
+  check.lv.names = FALSE
+)
+
+summary(jdr_resources_fit)
+
+semTools::compRelSEM(jdr_resources_fit, tau.eq = FALSE, higher = c("job_resources"))
+
+
+demands_factor = '
+  # First-order factors
+  wld =~ wld_1 + wld_2 + wld_3 + wld_4
+  rla =~ rla_1 + rla_2 + rla_3 + rla_4 + rla_5 + rla_6
+  wlb =~ wlb_1 + wlb_2 + wlb_3 + wlb_4
+  rlc =~ rlc_1 + rlc_2 + rlc_3 + rlc_4 + rlc_5 + rlc_6
+  
+  # Job Demands
+  job_demands =~ wld + rla + wlb + rlc
+'
+
+jdr_demands_fit <- lavaan::sem(
+  demands_factor,
+  data = processed,
+  estimator = "MLR",
+  check.lv.names = FALSE
+)
+
+semTools::compRelSEM(jdr_demands_fit, tau.eq = FALSE, higher = c("job_demands"), return.df = TRUE)
 ```
 
 ### Second-order convergent validity
 
 ```{r}
-stdsol <- standardizedSolution(jdr_measurement_fit)
+# Fornell-Larcker criterion: AVE above .5 is ideal
+AVE_second_order <- function(fit, second_order) {
+  # Extract standardized solution matrices
+  std <- inspect(fit, "std.all")
+  Lambda <- std$lambda   # item → first-order loadings
+  Beta   <- std$beta     # first-order → second-order loadings
+  
+  # Identify first-order factors that load on the second-order factor
+  gamma_vec <- Beta[, second_order]
+  first_order <- names(gamma_vec)[!is.na(gamma_vec)]
+  gamma_vec <- gamma_vec[first_order]   # remove NAs
+  
+  # Identify items loading on each first-order factor
+  # An item loads on a factor if its standardized loading is non-zero
+  items <- rownames(Lambda)
+  lambda_matrix <- Lambda[items, first_order, drop = FALSE]
+  
+  # λ_ij^2 (squared standardized first-order loadings)
+  lambda_sq <- lambda_matrix^2
+  
+  # γ_j^2 (squared second-order loadings)
+  gamma_sq <- gamma_vec^2
+  
+  # Compute item-implied loadings: λ_ij^2 * γ_j^2
+  implied_loadings_sq <- sweep(lambda_sq, 2, gamma_sq, `*`)
+  
+  # Numerator: sum of squared implied loadings
+  num <- sum(implied_loadings_sq)
+  
+  # Item residual variances: 1 - Σ λ_ij^2
+  item_resid <- 1 - rowSums(lambda_sq)
+  
+  # Denominator: numerator + sum of item residuals
+  den <- num + sum(item_resid)
+  
+  # AVE (second-order)
+  AVE2 <- num / den
+  
+  return(AVE2)
+}
+AVE_second_order(jdr_resources_fit, second_order = "job_resources")
+AVE_second_order(jdr_demands_fit, second_order = "job_demands")
 
-load_dem <- subset(stdsol, lhs == "job_demands" & op == "=~")[, "est.std"]
 
-resid_dem <- subset(stdsol, lhs == "job_demands" & op == "~~" & rhs != lhs)[, "est.std"]
+# Credé and Harms criterion: AVE above .24 is acceptable
+AVE2_raw <- function(fit, second_order) {
+  # Standardized matrices
+  std <- inspect(fit, "std.all")
+  Lambda <- std$lambda   # items → first-order loadings
+  Beta   <- std$beta     # first-order → second-order loadings
+  
+  # Extract second-order loadings γ_j
+  gamma_vec <- Beta[, second_order]
+  first_order <- names(gamma_vec)[!is.na(gamma_vec)]
+  gamma_vec <- gamma_vec[first_order]
+  
+  # Extract items and item loadings λ_ij
+  items <- rownames(Lambda)
+  lambda_matrix <- Lambda[items, first_order, drop = FALSE]
+  
+  # p = number of items loading on any first-order factor
+  p <- sum(rowSums(lambda_matrix != 0) > 0)
+  
+  # Compute (λ_ij * γ_j)^2 for each item-factor combination
+  implied_sq <- sweep(lambda_matrix, 2, gamma_vec, `*`)^2
+  
+  # Sum over all items and divide by p
+  AVE2 <- sum(implied_sq) / p
+  
+  return(AVE2)
+}
 
-r2_vals <- inspect(jdr_measurement_fit, "r2")
-
-resid_dem <- 1 - r2_vals[c("wld", "ppa", "pps", "rla", "rlc", "wlb")]
-
-AVE_dem <- sum(load_dem^2) / (sum(load_dem^2) + sum(resid_dem))
-AVE_dem
-
-load_res <- subset(stdsol, lhs == "job_resources" & op == "=~")[, "est.std"]
-resid_res <- 1 - r2_vals[c("opp", "mng", "inf", "soc", "sec", "ppr")]
-
-AVE_res <- sum(load_res^2) / (sum(load_res^2) + sum(resid_res))
-AVE_res
-
-lambda_items <- subset(stdsol, op == "=~" & lhs %in% c("wld", "ppa", "pps", "rla", "rlc", "wlb"))[, c("lhs","rhs","est.std")]
-gamma_factors <- subset(stdsol, op == "=~" & lhs == "job_demands")[, c("lhs","rhs","est.std")]
-lambda_items$gamma <- gamma_factors$est.std[ match(lambda_items$lhs, gamma_factors$rhs) ]
-lambda_items$combined <- lambda_items$est.std * lambda_items$gamma
-p <- nrow(lambda_items)
-
-AVE_dem <- sum(lambda_items$combined^2) / p
-AVE_dem
-
+AVE2_raw(jdr_resources_fit, "job_resources")
+AVE2_raw(jdr_demands_fit, "job_demands")
 ```
 ### Second-order divergent validity
 
@@ -541,5 +698,3 @@ AVE_dem
 ### Power analysis for construct-level SEM
 
 ### Power analysis for item-level SEM
-
-### Parceling strategy

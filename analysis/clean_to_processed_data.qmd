@@ -310,6 +310,17 @@ for (column in soc_support_columns) {
   )
 }
 
+soc_sup_supervisor_data = soc_support_data |> 
+  dplyr::select(soc_1, soc_2, soc_3, anonym_id) |> 
+  rename_with(~str_replace(., "soc", "scs"))
+
+soc_sup_colleague_data = soc_support_data |>
+  dplyr::select(soc_4, soc_5, soc_6, anonym_id) |> 
+  rename_with(~str_replace(., "soc", "scc")) %>% 
+  rename(scc_1 = scc_4,
+         scc_2 = scc_5,
+         scc_3 = scc_6)
+
 #No reverse coded items
 ```
 
@@ -553,7 +564,8 @@ survey_data = burnout_data |>
   left_join(jis_data_reversed, by = "anonym_id") |> 
   left_join(wlb_data_reversed, by = "anonym_id") |> 
   left_join(workload_data_reversed, by = "anonym_id") |> 
-  left_join(soc_support_data, by = "anonym_id") |> 
+  left_join(soc_sup_supervisor_data, by = "anonym_id") |>
+  left_join(soc_sup_colleague_data, by = "anonym_id") |> 
   left_join(opportunities_data, by = "anonym_id") |> 
   left_join(qrp_data, by = "anonym_id") |> 
   left_join(influence_data, by = "anonym_id") |> 

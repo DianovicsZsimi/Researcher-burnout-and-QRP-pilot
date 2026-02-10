@@ -29,7 +29,7 @@ processed = read_csv(here::here("data/processed/processed_data.csv"))
 ### Checking missingness
 
 ```{r}
-surveys = c("brt", "pps", "ppa", "ppr", "wld", "soc",
+surveys = c("brt", "pps", "ppa", "ppr", "wld", "scs", "scc",
             "opp", "wlb", "sec", "qrp", "inf", "mng",
             "rla", "rlc", "pay", "tol", "gnl")
 
