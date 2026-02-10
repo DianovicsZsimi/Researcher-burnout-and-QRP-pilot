@@ -314,29 +314,6 @@ htmt(jdr_fit)
 
 # Assumptions for the models
 
-### Multicollinearity
-
-```{r}
-correlation_matrix <- data_normality  |> 
-  cor(use = "pairwise.complete.obs") |>
-  round(2)
-
-correlation_matrix_filtered <- correlation_matrix
-correlation_matrix_filtered[abs(correlation_matrix_filtered) < 0.50] <- ""
-
-correlation_matrix_filtered <- as.data.frame(correlation_matrix_filtered)
-correlation_matrix_filtered
-
-
-lm_vif <- lm(burnout ~ wld + ppa + pps + rla + rlc + wlb + opp + mng + inf + soc + pay + tol + ppr + gnl + sec, data = linearity_data)
-vif(lm_vif)
-
-lm_vif_structural <- lm(burnout_total ~ job_demands_total + job_resources_total, data = linearity_data)
-vif(lm_vif)
-
-# No multicollinearity issues detected (all correlations < 0.70)
-```
-
 ### Outlier detection
 
 ```{r}

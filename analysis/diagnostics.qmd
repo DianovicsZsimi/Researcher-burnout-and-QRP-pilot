@@ -16,9 +16,12 @@ library(here)
 library(psych)
 library(semTools)
 library(semPower)
-library(MVN)
+#install.packages("MVN")
+#library(MVN)
 library(car)
 library(lavaan)
+install.packages("influence.SEM")
+library(influence.SEM)
 
 data_path <- here("data")
 ```
@@ -504,6 +507,7 @@ jdr_measurement_fit <- sem(
   jdr_measurement_model,
   data = jdr_measurement_items,
   estimator = "MLR",
+  check.lv.names = FALSE,
   std.lv = TRUE
 )
 
@@ -689,11 +693,42 @@ AVE2_raw <- function(fit, second_order) {
 AVE2_raw(jdr_resources_fit, "job_resources")
 AVE2_raw(jdr_demands_fit, "job_demands")
 ```
-### Second-order divergent validity
-
-### Multicollinearity
 
 ### Outlier detection
+
+```{r}
+cooks_d <- genCookDist(jdr_measurement_fit, data = processed, check.lv.names = FALSE)
+
+outlier_df <- processed %>%
+  mutate(
+    id = seq_len(nrow(.)),
+    cooks_d = cooks_d,
+    is_outlier_cooks = cooks_d > 1   # or 0.5 depending on preference
+  )
+
+plot(outlier_df$cooks_d, type = "h", main = "Cook's Distance", ylab = "Cook's Distance")
+
+# Sensivity analysis
+
+data_no_outliers <- outlier_df %>% 
+  filter(!is_outlier_cooks) %>% 
+  dplyr::select(-c(cooks_d, is_outlier_cooks))  # remove diagnostics columns
+
+
+# Refit the model without outliers
+
+fit_no_outlier <- sem(model = jdr_measurement_fit,
+                data = data_no_outliers,
+                std.lv = TRUE,
+                estimator = "MLR",
+                missing = "listwise",
+                verbose = TRUE)
+
+summary(fit_no_outlier, fit.measures = TRUE, standardized = TRUE, modindices = TRUE, rsquare = TRUE)
+
+fit_no_outlier$AIC
+```
+
 
 ### Power analysis for construct-level SEM
 
