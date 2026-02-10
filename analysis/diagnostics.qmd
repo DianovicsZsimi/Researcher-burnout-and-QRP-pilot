@@ -17,10 +17,10 @@ library(psych)
 library(semTools)
 library(semPower)
 #install.packages("MVN")
-#library(MVN)
+library(MVN)
 library(car)
 library(lavaan)
-install.packages("influence.SEM")
+#install.packages("influence.SEM")
 library(influence.SEM)
 
 data_path <- here("data")
@@ -494,7 +494,8 @@ jdr_measurement_model <- '
   job_demands ~~ job_resources
   
   # burnout is regressed on job demands and job resources
-  burnout ~ job_demands + job_resources
+  job_demands ~ burnout
+  job_resources ~ burnout
   
   # Allowing theoretically related indicators and factors to correlate
   scs ~~ scc
@@ -512,8 +513,6 @@ jdr_measurement_fit <- sem(
 )
 
 summary(jdr_measurement_fit, fit.measures = TRUE, standardized = TRUE)
-
-inspect(jdr_measurement_fit, "cor.lv")
 
 modificationIndices(jdr_measurement_fit, sort. = TRUE, maximum.number = 10)
 
@@ -721,15 +720,49 @@ fit_no_outlier <- sem(model = jdr_measurement_fit,
                 data = data_no_outliers,
                 std.lv = TRUE,
                 estimator = "MLR",
-                missing = "listwise",
                 verbose = TRUE)
 
-summary(fit_no_outlier, fit.measures = TRUE, standardized = TRUE, modindices = TRUE, rsquare = TRUE)
+summary(fit_no_outlier, fit.measures = TRUE, standardized = TRUE, modindices = FALSE, rsquare = FALSE)
+summary(jdr_measurement_fit, fit.measures = TRUE, standardized = TRUE, modindices = FALSE, rsquare = FALSE)
 
-fit_no_outlier$AIC
+
+anova(jdr_measurement_fit, fit_no_outlier)
 ```
 
+### Power analysis for target effect using pwrSEM
 
-### Power analysis for construct-level SEM
+```{r}
+pwrsem_loadings = standardizedSolution(jdr_measurement_fit) %>%
+  dplyr::filter(op == "=~") %>%
+  dplyr::select(lhs, rhs, est.std)
 
-### Power analysis for item-level SEM
+pwrsem_reg_coefs <- standardizedSolution(jdr_measurement_fit) |>
+  subset(op == "~", select = c("lhs","rhs","est.std"))
+
+pwrsem_res_variances <- as.data.frame(inspect(jdr_measurement_fit, "std.all")$lambda)
+
+write.csv(pwrsem_loadings, "pwrsem_loadings.csv")
+write.csv(pwrsem_reg_coefs, "pwrsem_reg_coefs.csv")
+write.csv(pwrsem_res_variances, "pwrsem_res_variances.csv")
+```
+
+### Power analysis for global fit
+
+```{r}
+install.packages("simsem")
+library(simsem)
+
+popModel <- model.lavaan(jdr_measurement_fit)
+
+out <- sim(
+  nRep = 100,
+  model = jdr_measurement_fit,          # model to fit in each replication
+  generate = popModel,  # the population model (from pilot)
+  n = 400     # same N as your pilot
+)
+summary(out)
+
+
+
+```
+
