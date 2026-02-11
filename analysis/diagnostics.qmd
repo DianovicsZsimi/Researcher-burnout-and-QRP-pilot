@@ -11,17 +11,28 @@ format: html
 ### Loading packages
 
 ```{r}
+if(!require("tidyverse")) install.packages("tidyverse")
+if(!require("here")) install.packages("here")
+if(!require("psych")) install.packages("psych")
+if(!require("semTools")) install.packages("semTools")
+if(!require("semPower")) install.packages("semPower")
+if(!require("MVN")) install.packages("MVN")
+if(!require("car")) install.packages("car")
+if(!require("lavaan")) install.packages("lavaan")
+if(!require("influence.SEM")) install.packages("influence.SEM")
+if(!require("simsem")) install.packages("simsem")
+if(!require("tidyverse")) install.packages("tidyverse")
+
 library(tidyverse)
 library(here)
 library(psych)
 library(semTools)
 library(semPower)
-#install.packages("MVN")
 library(MVN)
 library(car)
 library(lavaan)
-#install.packages("influence.SEM")
 library(influence.SEM)
+library(simsem)
 
 data_path <- here("data")
 ```
@@ -35,7 +46,6 @@ processed = read_csv(here::here("data/processed/aggregated_data.csv"))
 ### Defining items and scales
 
 ```{r}
-# QRP removed
 
 items = c("brt_", "wld_", "scs_", "scc_",
             "opp_", "wlb_", "sec_", "inf_", "mng_",
@@ -454,7 +464,7 @@ summary(rlc_fit_2)
 fitMeasures(rlc_fit_1, "bic")
 fitMeasures(rlc_fit_2, "bic")
 
-# Two factor model is better for both PPR and RLC based on BIC and fit indices, however, only PPR has theoretical interpretation. Consider revising these scales in future studies. 
+# Two factor model is better for RLC based on BIC and fit indices, however, it has no theoretical grounding. No changes are made.
 ```
 
 ## Construct- and factor-level analyses
@@ -621,8 +631,8 @@ semTools::compRelSEM(jdr_demands_fit, tau.eq = FALSE, higher = c("job_demands"),
 AVE_second_order <- function(fit, second_order) {
   # Extract standardized solution matrices
   std <- inspect(fit, "std.all")
-  Lambda <- std$lambda   # item → first-order loadings
-  Beta   <- std$beta     # first-order → second-order loadings
+  Lambda <- std$lambda   
+  Beta   <- std$beta     
   
   # Identify first-order factors that load on the second-order factor
   gamma_vec <- Beta[, second_order]
@@ -630,7 +640,6 @@ AVE_second_order <- function(fit, second_order) {
   gamma_vec <- gamma_vec[first_order]   # remove NAs
   
   # Identify items loading on each first-order factor
-  # An item loads on a factor if its standardized loading is non-zero
   items <- rownames(Lambda)
   lambda_matrix <- Lambda[items, first_order, drop = FALSE]
   
@@ -640,19 +649,15 @@ AVE_second_order <- function(fit, second_order) {
   # γ_j^2 (squared second-order loadings)
   gamma_sq <- gamma_vec^2
   
-  # Compute item-implied loadings: λ_ij^2 * γ_j^2
+  # Compute item-implied loadings
   implied_loadings_sq <- sweep(lambda_sq, 2, gamma_sq, `*`)
   
-  # Numerator: sum of squared implied loadings
   num <- sum(implied_loadings_sq)
   
-  # Item residual variances: 1 - Σ λ_ij^2
   item_resid <- 1 - rowSums(lambda_sq)
   
-  # Denominator: numerator + sum of item residuals
   den <- num + sum(item_resid)
   
-  # AVE (second-order)
   AVE2 <- num / den
   
   return(AVE2)
@@ -665,8 +670,8 @@ AVE_second_order(jdr_demands_fit, second_order = "job_demands")
 AVE2_raw <- function(fit, second_order) {
   # Standardized matrices
   std <- inspect(fit, "std.all")
-  Lambda <- std$lambda   # items → first-order loadings
-  Beta   <- std$beta     # first-order → second-order loadings
+  Lambda <- std$lambda  
+  Beta   <- std$beta    
   
   # Extract second-order loadings γ_j
   gamma_vec <- Beta[, second_order]
@@ -749,20 +754,189 @@ write.csv(pwrsem_res_variances, "pwrsem_res_variances.csv")
 ### Power analysis for global fit
 
 ```{r}
-install.packages("simsem")
-library(simsem)
-
 popModel <- model.lavaan(jdr_measurement_fit)
 
 out <- sim(
   nRep = 100,
-  model = jdr_measurement_fit,          # model to fit in each replication
-  generate = popModel,  # the population model (from pilot)
-  n = 400     # same N as your pilot
+  model = jdr_measurement_fit,         
+  generate = popModel,
+  n = 400     
 )
 summary(out)
 
+```
 
+```{r}
+population_model <- fitted(jdr_measurement_fit)$cov
+
+hypothethised_model_structure_dem <- '
+# First-order factors
+  wld =~ wld_1 + wld_2 + wld_3 + wld_4
+  rla =~ rla_1 + rla_2 + rla_3 + rla_4 + rla_5 + rla_6
+  wlb =~ wlb_1 + wlb_2 + wlb_3 + wlb_4
+  rlc =~ rlc_1 + rlc_2 + rlc_3 + rlc_4 + rlc_5 + rlc_6
+  
+  opp =~ opp_1 + opp_2 + opp_3
+  mng =~ mng_1 + mng_2 
+  inf =~ inf_1 + inf_2 + inf_3 + inf_4 + inf_5 + inf_6
+  scs =~ scs_1 + scs_2 + scs_3 
+  scc =~ scc_1 + scc_2 + scc_3
+  sec =~ sec_1 + sec_2 + sec_3 + sec_4
+  
+  burnout =~ brt_1 + brt_2 + brt_3 + brt_4
+  
+  # Job Demands
+  job_demands =~ wld + rla + wlb + rlc
+
+  # Job Resources
+  job_resources =~ opp + mng + inf + scs + scc + sec
+  
+  # Allowing latent factors to correlate
+  job_demands ~~ job_resources
+  
+  # burnout is regressed on job demands and job resources
+  job_demands ~ %f*burnout
+  job_resources ~ burnout
+  
+  # Allowing theoretically related indicators and factors to correlate
+  scs ~~ scc
+  rla ~~ rlc
+  rla_5 ~~ rla_6
+  rlc_1 ~~ rlc_6
+'
+
+build_H0 <- function(beta_dem, Sigma_H1) {
+  
+  model_H0 <- sprintf(hypothethised_model_structure_dem, beta_dem)
+  
+  res_H0 <- lavaan::sem(
+    model_H0,
+    sample.cov = Sigma_H1,
+    sample.nobs = 100000,
+    sample.cov.rescale = FALSE
+  )
+  
+  list(
+    Sigma_H0 = fitted(res_H0)$cov,
+    df_H0    = res_H0@test[[1]]$df
+  )
+}
+
+
+compute_power <- function(beta_dem, Sigma_H1) {
+  
+  h0 <- build_H0(beta_dem, Sigma_H1)
+  
+  out <- semPower.aPriori(
+    SigmaHat = h0$Sigma_H0,
+    Sigma    = Sigma_H1,
+    alpha    = 0.05,
+    power    = 0.80,
+    df       = h0$df_H0
+  )
+  
+  out$requiredN
+}
+
+
+beta_demands_grid <- seq(0, 0.5, by = 0.1)
+
+results_dem <- data.frame(
+  beta_dem = beta_demands_grid,
+  requiredN = sapply(
+    beta_demands_grid,
+    compute_power,
+    Sigma_H1 = population_model
+  )
+)
+
+hypothethised_model_structure_res <- '
+# First-order factors
+  wld =~ wld_1 + wld_2 + wld_3 + wld_4
+  rla =~ rla_1 + rla_2 + rla_3 + rla_4 + rla_5 + rla_6
+  wlb =~ wlb_1 + wlb_2 + wlb_3 + wlb_4
+  rlc =~ rlc_1 + rlc_2 + rlc_3 + rlc_4 + rlc_5 + rlc_6
+  
+  opp =~ opp_1 + opp_2 + opp_3
+  mng =~ mng_1 + mng_2 
+  inf =~ inf_1 + inf_2 + inf_3 + inf_4 + inf_5 + inf_6
+  scs =~ scs_1 + scs_2 + scs_3 
+  scc =~ scc_1 + scc_2 + scc_3
+  sec =~ sec_1 + sec_2 + sec_3 + sec_4
+  
+  burnout =~ brt_1 + brt_2 + brt_3 + brt_4
+  
+  # Job Demands
+  job_demands =~ wld + rla + wlb + rlc
+
+  # Job Resources
+  job_resources =~ opp + mng + inf + scs + scc + sec
+  
+  # Allowing latent factors to correlate
+  job_demands ~~ job_resources
+  
+  # burnout is regressed on job demands and job resources
+  job_demands ~ burnout
+  job_resources ~ %f*burnout
+  
+  # Allowing theoretically related indicators and factors to correlate
+  scs ~~ scc
+  rla ~~ rlc
+  rla_5 ~~ rla_6
+  rlc_1 ~~ rlc_6
+'
+
+build_H0 <- function(beta_res, Sigma_H1) {
+  
+  model_H0 <- sprintf(hypothethised_model_structure_res, beta_res)
+  
+  res_H0 <- lavaan::sem(
+    model_H0,
+    sample.cov = Sigma_H1,
+    sample.nobs = 100000,
+    sample.cov.rescale = FALSE
+  )
+  
+  list(
+    Sigma_H0 = fitted(res_H0)$cov,
+    df_H0    = res_H0@test[[1]]$df
+  )
+}
+
+
+compute_power <- function(beta_res, Sigma_H1) {
+  
+  h0 <- build_H0(beta_res, Sigma_H1)
+  
+  out <- semPower.aPriori(
+    SigmaHat = h0$Sigma_H0,
+    Sigma    = Sigma_H1,
+    alpha    = 0.05,
+    power    = 0.80,
+    df       = h0$df_H0
+  )
+  
+  out$requiredN
+}
+
+
+beta_resources_grid <- seq(0, -0.5, by = -0.1)
+
+results_res <- data.frame(
+  beta_res = beta_resources_grid,
+  requiredN = sapply(
+    beta_resources_grid,
+    compute_power,
+    Sigma_H1 = population_model
+  )
+)
+
+results_res
+results_dem
+
+power_estimates = results_res %>% 
+  full_join(results_dem) %>% 
+  select(beta_res, beta_dem, requiredN)
 
 ```
 
