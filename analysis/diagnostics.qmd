@@ -48,12 +48,14 @@ processed = read_csv(here::here("data/processed/aggregated_data.csv"))
 ```{r}
 
 items = c("brt_", "wld_", "scs_", "scc_",
-            "opp_", "wlb_", "sec_", "inf_", "mng_",
-            "rla_", "rlc_")
+          "opp_", "wlb_", "sec_", "inf_", "mng_", "rla_",
+          "pps_", "ppa_", "ppr_"
+            )
 
-surveys = c("brt", "wld", "scs", "scc",
-            "opp", "wlb", "sec", "inf", "mng",
-            "rla", "rlc")
+surveys = c("brt", "wld", "scs", "scc", 
+            "opp", "wlb", "sec", "inf", "mng", "rla",
+            "pps", "ppa", "ppr"
+            )
 ```
 
 ## Item-level analyses
@@ -288,13 +290,15 @@ resources_first_order = '
   scs =~ scs_1 + scs_2 + scs_3 
   scc =~ scc_1 + scc_2 + scc_3
   sec =~ sec_1 + sec_2 + sec_3 + sec_4
+  ppr =~ ppr_13 + ppr_14 + ppr_15 + ppr_16 + ppr_17 + ppr_18
 '
 
 demands_first_order = '
   wld =~ wld_1 + wld_2 + wld_3 + wld_4
   rla =~ rla_1 + rla_2 + rla_3 + rla_4 + rla_5 + rla_6
   wlb =~ wlb_1 + wlb_2 + wlb_3 + wlb_4
-  rlc =~ rlc_1 + rlc_2 + rlc_3 + rlc_4 + rlc_5 + rlc_6
+  pps =~ pps_1 + pps_2 + pps_3 + pps_4 + pps_5 + pps_6
+  ppa =~ ppa_7 + ppa_8 + ppa_9 + ppa_10 + ppa_11 + ppa_12
 '
 
 
@@ -332,7 +336,7 @@ build_multifactor_cfa <- function(data, surveys, items) {
     indicators <- names(data)[startsWith(names(data), prefix)]
     
     # skip scales with <3 items
-    if (length(indicators) < 3) return(NULL)
+    # if (length(indicators) < 3) return(NULL)
     
     paste0(sv, " =~ ", paste(indicators, collapse = " + "))
   })
@@ -352,7 +356,7 @@ multi_cfa_fit <- cfa(
 )
 
 
-latent_correlations <- inspect(multi_cfa_fit, "cor.lv")
+latent_correlations <- lavaan::inspect(multi_cfa_fit, "cor.lv")
 latent_correlations
 
 # average variance extracted greater than shared variance
@@ -368,7 +372,7 @@ ave_pairs <- expand.grid(
   mutate(
     ave1 = ave_table$AVE[match(survey1, ave_table$survey)],
     ave2 = ave_table$AVE[match(survey2, ave_table$survey)]
-  ) %>% 
+  ) %>%
   rowwise() %>%
   filter(!is.na(ave1) & !is.na(ave2))
 
@@ -394,7 +398,7 @@ correlation_matrix <- processed %>%
 correlation_matrix[abs(correlation_matrix) < 0.50] <- NA
 correlation_matrix <- as.data.frame(correlation_matrix)
 
-lm_vif <- lm(brt ~ wld + rla + rlc + wlb + opp + mng + inf + scs + scc + sec, data = processed)
+lm_vif <- lm(brt ~ wld + rla + wlb + pps + ppr + ppa + opp + mng + inf + scs + scc + sec, data = processed)
 vif(lm_vif)
 
 # No multicollinearity issues detected (all correlations < 0.70)
@@ -405,7 +409,7 @@ vif(lm_vif)
 ```{r}
 linearity_data <- processed |>
   dplyr::mutate(
-    job_demands_total = rowMeans(dplyr::select(cur_data(), wld, rla, rlc, wlb), na.rm = TRUE),
+    job_demands_total = rowMeans(dplyr::select(cur_data(), wld, rla, wlb), na.rm = TRUE),
     job_resources_total = rowMeans(dplyr::select(cur_data(), opp, mng, inf, scs, scc, sec), na.rm = TRUE),
     burnout_total = brt
   )
@@ -416,7 +420,7 @@ ggplot(linearity_data, aes(x = job_demands_total, y = burnout_total)) +
 ggplot(linearity_data, aes(x = job_resources_total, y = burnout_total)) +
   geom_point() + geom_smooth(method = "loess") + ggtitle("Job Resources → Burnout")
 
-job_demand_items <- c("wld", "rla", "rlc", "wlb")
+job_demand_items <- c("wld", "rla", "wlb", "pps", "ppa")
 for(item in job_demand_items) {
   print(
     ggplot(linearity_data, aes_string(x = "job_demands_total", y = item)) +
@@ -425,7 +429,7 @@ for(item in job_demand_items) {
   )
 }
 
-job_resource_items <- c("opp", "mng", "inf", "scs", "scc", "sec")
+job_resource_items <- c("opp", "mng", "inf", "scs", "scc", "sec", "ppr")
 for(item in job_resource_items) {
   print(
     ggplot(linearity_data, aes_string(x = "job_resources_total", y = item)) +
@@ -444,7 +448,7 @@ plot(lm1, which = 2)
 ### Underperforming constructs
 
 ```{r}
-underperforming_scales = c("rlc")
+underperforming_scales = c("rlc", "pps", "ppa")
 
 # Detailed CFA
 underperforming_cfa_results <- lapply(underperforming_scales, function(survey) {
@@ -454,6 +458,12 @@ underperforming_cfa_results <- lapply(underperforming_scales, function(survey) {
 # underperforming_cfa_results <- compact(underperforming_cfa_results)
 lapply(underperforming_cfa_results, function(x) summary(x$fit, fit.measures = TRUE, standardized = TRUE))
 lapply(underperforming_cfa_results, function(x) modificationIndices(x$fit, sort. = TRUE, maximum.number = 10))
+
+fit_list <- lapply(underperforming_cfa_results, function(x) {
+  fitMeasures(x$fit, c("cfi", "tli", "rmsea", "srmr", "aic", "bic"))
+})
+
+fit_df <- do.call(rbind, fit_list)
 
 # Fit EFA for  RLC
 
@@ -483,7 +493,7 @@ jdr_measurement_model <- '
   wld =~ wld_1 + wld_2 + wld_3 + wld_4
   rla =~ rla_1 + rla_2 + rla_3 + rla_4 + rla_5 + rla_6
   wlb =~ wlb_1 + wlb_2 + wlb_3 + wlb_4
-  rlc =~ rlc_1 + rlc_2 + rlc_3 + rlc_4 + rlc_5 + rlc_6
+
   
   opp =~ opp_1 + opp_2 + opp_3
   mng =~ mng_1 + mng_2 
@@ -495,7 +505,7 @@ jdr_measurement_model <- '
   burnout =~ brt_1 + brt_2 + brt_3 + brt_4
   
   # Job Demands
-  job_demands =~ wld + rla + wlb + rlc
+  job_demands =~ wld + rla + wlb
 
   # Job Resources
   job_resources =~ opp + mng + inf + scs + scc + sec
@@ -509,9 +519,7 @@ jdr_measurement_model <- '
   
   # Allowing theoretically related indicators and factors to correlate
   scs ~~ scc
-  rla ~~ rlc
   rla_5 ~~ rla_6
-  rlc_1 ~~ rlc_6
 '
 
 jdr_measurement_fit <- sem(
@@ -525,7 +533,7 @@ jdr_measurement_fit <- sem(
 summary(jdr_measurement_fit, fit.measures = TRUE, standardized = TRUE)
 
 modificationIndices(jdr_measurement_fit, sort. = TRUE, maximum.number = 10)
-
+lavaan::inspect(jdr_measurement_fit_missing, 'coverage')
 ```
 
 ### Composite SEM
@@ -533,7 +541,7 @@ modificationIndices(jdr_measurement_fit, sort. = TRUE, maximum.number = 10)
 ```{r}
 jdr_composite_model <- '
   # Job Demands
-  job_demands =~ wld + rla + wlb + rlc
+  job_demands =~ wld + rla + wlb
 
   # Job Resources
   job_resources =~ opp + mng + inf + scs + scc + sec
@@ -545,7 +553,6 @@ jdr_composite_model <- '
   brt ~ job_demands + job_resources
   
   # Allowing theoretically related indicators to correlate
-  rlc ~~ rla
   scs ~~ scc
 '
 
@@ -564,7 +571,7 @@ summary(jdr_composite_fit, fit.measures = TRUE, standardized = TRUE)
 
 ```{r}
 constructs = processed[, c("brt",
-              "wld", "rla", "rlc", "wlb",
+              "wld", "rla", "wlb",
               "opp", "mng", "inf", "scc", "scs", "sec")]
 
 harman_1f <- fa(constructs,
@@ -608,10 +615,9 @@ demands_factor = '
   wld =~ wld_1 + wld_2 + wld_3 + wld_4
   rla =~ rla_1 + rla_2 + rla_3 + rla_4 + rla_5 + rla_6
   wlb =~ wlb_1 + wlb_2 + wlb_3 + wlb_4
-  rlc =~ rlc_1 + rlc_2 + rlc_3 + rlc_4 + rlc_5 + rlc_6
   
   # Job Demands
-  job_demands =~ wld + rla + wlb + rlc
+  job_demands =~ wld + rla + wlb
 '
 
 jdr_demands_fit <- lavaan::sem(
@@ -630,7 +636,7 @@ semTools::compRelSEM(jdr_demands_fit, tau.eq = FALSE, higher = c("job_demands"),
 # Fornell-Larcker criterion: AVE above .5 is ideal
 AVE_second_order <- function(fit, second_order) {
   # Extract standardized solution matrices
-  std <- inspect(fit, "std.all")
+  std <- lavaan::inspect(fit, "std.all")
   Lambda <- std$lambda   
   Beta   <- std$beta     
   
@@ -669,7 +675,7 @@ AVE_second_order(jdr_demands_fit, second_order = "job_demands")
 # Credé and Harms criterion: AVE above .24 is acceptable
 AVE2_raw <- function(fit, second_order) {
   # Standardized matrices
-  std <- inspect(fit, "std.all")
+  std <- lavaan::inspect(fit, "std.all")
   Lambda <- std$lambda  
   Beta   <- std$beta    
   
@@ -744,7 +750,7 @@ pwrsem_loadings = standardizedSolution(jdr_measurement_fit) %>%
 pwrsem_reg_coefs <- standardizedSolution(jdr_measurement_fit) |>
   subset(op == "~", select = c("lhs","rhs","est.std"))
 
-pwrsem_res_variances <- as.data.frame(inspect(jdr_measurement_fit, "std.all")$lambda)
+pwrsem_res_variances <- as.data.frame(lavaan::inspect(jdr_measurement_fit, "std.all")$lambda)
 
 write.csv(pwrsem_loadings, "pwrsem_loadings.csv")
 write.csv(pwrsem_reg_coefs, "pwrsem_reg_coefs.csv")
@@ -774,7 +780,6 @@ hypothethised_model_structure_dem <- '
   wld =~ wld_1 + wld_2 + wld_3 + wld_4
   rla =~ rla_1 + rla_2 + rla_3 + rla_4 + rla_5 + rla_6
   wlb =~ wlb_1 + wlb_2 + wlb_3 + wlb_4
-  rlc =~ rlc_1 + rlc_2 + rlc_3 + rlc_4 + rlc_5 + rlc_6
   
   opp =~ opp_1 + opp_2 + opp_3
   mng =~ mng_1 + mng_2 
@@ -786,7 +791,7 @@ hypothethised_model_structure_dem <- '
   burnout =~ brt_1 + brt_2 + brt_3 + brt_4
   
   # Job Demands
-  job_demands =~ wld + rla + wlb + rlc
+  job_demands =~ wld + rla + wlb
 
   # Job Resources
   job_resources =~ opp + mng + inf + scs + scc + sec
@@ -800,9 +805,7 @@ hypothethised_model_structure_dem <- '
   
   # Allowing theoretically related indicators and factors to correlate
   scs ~~ scc
-  rla ~~ rlc
   rla_5 ~~ rla_6
-  rlc_1 ~~ rlc_6
 '
 
 build_H0 <- function(beta_dem, Sigma_H1) {
@@ -855,7 +858,6 @@ hypothethised_model_structure_res <- '
   wld =~ wld_1 + wld_2 + wld_3 + wld_4
   rla =~ rla_1 + rla_2 + rla_3 + rla_4 + rla_5 + rla_6
   wlb =~ wlb_1 + wlb_2 + wlb_3 + wlb_4
-  rlc =~ rlc_1 + rlc_2 + rlc_3 + rlc_4 + rlc_5 + rlc_6
   
   opp =~ opp_1 + opp_2 + opp_3
   mng =~ mng_1 + mng_2 
@@ -867,7 +869,7 @@ hypothethised_model_structure_res <- '
   burnout =~ brt_1 + brt_2 + brt_3 + brt_4
   
   # Job Demands
-  job_demands =~ wld + rla + wlb + rlc
+  job_demands =~ wld + rla + wlb
 
   # Job Resources
   job_resources =~ opp + mng + inf + scs + scc + sec
@@ -881,9 +883,7 @@ hypothethised_model_structure_res <- '
   
   # Allowing theoretically related indicators and factors to correlate
   scs ~~ scc
-  rla ~~ rlc
   rla_5 ~~ rla_6
-  rlc_1 ~~ rlc_6
 '
 
 build_H0 <- function(beta_res, Sigma_H1) {
@@ -938,5 +938,60 @@ power_estimates = results_res %>%
   full_join(results_dem) %>% 
   select(beta_res, beta_dem, requiredN)
 
+```
+
+# testing
+
+```{r}
+jdr_measurement_model <- '
+  # First-order factors
+  pps =~ pps_1 + pps_2 + pps_3 + pps_4 + pps_5 + pps_6
+  ppa =~ ppa_7 + ppa_8 + ppa_9 + ppa_10 + ppa_11 + ppa_12
+  wld =~ wld_1 + wld_2 + wld_3 + wld_4
+  rla =~ rla_1 + rla_2 + rla_3 + rla_4 + rla_5 + rla_6
+  wlb =~ wlb_1 + wlb_2 + wlb_3 + wlb_4
+
+  
+  opp =~ opp_1 + opp_2 + opp_3
+  mng =~ mng_1 + mng_2 
+  inf =~ inf_1 + inf_2 + inf_3 + inf_4 + inf_5 + inf_6
+  scs =~ scs_1 + scs_2 + scs_3 
+  scc =~ scc_1 + scc_2 + scc_3
+  sec =~ sec_1 + sec_2 + sec_3 + sec_4
+  
+  burnout =~ brt_1 + brt_2 + brt_3 + brt_4
+  
+  # Job Resources
+  job_resources =~ opp + mng + inf + scs + scc + sec
+  
+  # Job Demands
+  job_demands =~ wld + rla + wlb + ppa
+  
+  # burnout is regressed on job demands and job resources
+  burnout ~  pps + job_demands + job_resources
+  
+  # Allowing latent factors to correlate
+  job_demands ~~ job_resources
+  job_demands ~~ pps
+  
+  # Allowing theoretically related indicators and factors to correlate
+  scs ~~ scc
+  rla_5 ~~ rla_6
+  ppa_10 ~~ ppa_12
+  ppa_8 ~~ ppa_9
+'
+
+jdr_measurement_fit <- sem(
+  jdr_measurement_model,
+  data = processed,
+  estimator = "MLR",
+  missing = 'fiml',
+  check.lv.names = FALSE,
+  std.lv = TRUE
+)
+
+summary(jdr_measurement_fit, fit.measures = TRUE, standardized = TRUE)
+lavaan::inspect(jdr_measurement_fit, 'cor.lv')
+modificationindices(jdr_measurement_fit, sort. = TRUE)
 ```
 

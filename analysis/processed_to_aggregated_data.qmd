@@ -29,9 +29,9 @@ processed = read_csv(here::here("data/processed/processed_data.csv"))
 ### Checking missingness
 
 ```{r}
-surveys = c("brt", "pps", "ppa", "ppr", "wld", "scs", "scc",
-            "opp", "wlb", "sec", "qrp", "inf", "mng",
-            "rla", "rlc", "pay", "tol", "gnl")
+surveys = c("brt", "wld", "scs", "scc",
+            "opp", "wlb", "sec", "inf", "mng", "pps", "ppa", "ppr",
+            "rla", "rlc")
 
 missingness_summary = processed %>%
   dplyr::select(starts_with(surveys)) %>%
@@ -64,9 +64,6 @@ processed %>%
 
 # Looking at missingness patterns, I assume there has been an error in the survey programming, as the first 8 rows all have no brt_3 and brt_4 responses, after that the same relationship does not appear.
 
-# This is the percentage of people having at least one missing value
-
-16 / 251 * 100
 
 # Total missing values
 processed %>%
@@ -75,11 +72,9 @@ processed %>%
             total_values = nrow(.) * ncol(.),
             missing_percentage = (total_missing / total_values) * 100)
 
-# Most of the missingness comes from the first 8 individuals and the QRP questions, without them the missingness is very low, 
-# thus I will listwise delete participants with any missing values in the surveys.
+# Most of the missingness comes from the first 8 individuals and the QRP questions, without them the missingness is very low
 
-processed_filtered = processed %>% 
-  filter(if_all(starts_with(surveys), ~ !is.na(.)))
+processed_filtered = processed
 ```
 
 ### Aggregating data
