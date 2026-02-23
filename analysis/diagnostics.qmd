@@ -40,7 +40,7 @@ data_path <- here("data")
 ### Loading data
 
 ```{r}
-processed = read_csv(here::here("data/processed/aggregated_data.csv"))
+data = read_csv(here::here("data/processed/aggregated_data.csv"))
 ```
 
 ### Defining items and scales
@@ -56,6 +56,21 @@ surveys = c("brt", "wld", "scs", "scc",
             "opp", "wlb", "sec", "inf", "mng", "rla",
             "pps", "ppa", "ppr"
             )
+```
+
+### Ordering items
+
+```{r}
+processed <- data %>%
+  dplyr::mutate(
+    dplyr::across(
+      dplyr::contains(items),
+      ~ ordered(.)
+    )) %>%
+  dplyr::mutate(
+    wld_1 = ordered(wld_1, levels = c(2, 3, 4, 5))
+  ) %>% 
+  dplyr::select(contains(items))
 ```
 
 ## Item-level analyses
@@ -90,7 +105,7 @@ item_descriptives <- function(data, prefixes) {
   return(desc_df)
 }
 
-descriptives_table <- item_descriptives(processed, items)
+descriptives_table <- item_descriptives(data, items)
 ```
 
 ### Univariate and multivariate normality
@@ -112,7 +127,8 @@ multivariate_normality_results = mvn(data_normality, mvn_test = "mardia", descri
 ```{r}
 omega_function <- function(data, item_prefix) {
   items_df <- data %>%
-    dplyr::select(starts_with(item_prefix))
+    dplyr::select(starts_with(item_prefix)) %>% 
+    filter(!is.na(item_prefix))
   
    if (ncol(items_df) < 3) {
     return(data.frame(
@@ -124,6 +140,7 @@ omega_function <- function(data, item_prefix) {
   omega_out <- psych::omega(
     items_df,
     nfactors = 1,
+    poly = TRUE,
     fm = "pa",
     plot = FALSE,
     digits = 3
@@ -137,6 +154,7 @@ omega_function <- function(data, item_prefix) {
 
 omega_results <- dplyr::bind_rows(
   lapply(items, function(prefix) omega_function(processed, prefix)))
+
 ```
 
 ### Unidimensionality
@@ -144,7 +162,8 @@ omega_results <- dplyr::bind_rows(
 ```{r}
 unidimensionality_function <- function(data, item_prefix) {
   items_df <- data |>
-    dplyr::select(starts_with(item_prefix))
+    dplyr::select(starts_with(item_prefix)) %>% 
+    dplyr::mutate(dplyr::across(everything(), ~ as.numeric(as.character(.x))))
 
   if (ncol(items_df) < 2) {
     return(data.frame(
@@ -159,8 +178,10 @@ unidimensionality_function <- function(data, item_prefix) {
   fa_out <- psych::fa(
     items_df,
     nfactors = 1,
-    fm = "minres",
-    rotate = "none"
+    cor = "poly",
+    fm = "wls",
+    rotate = "oblimin",
+    n.obs = nrow(items_df)
   )
 
   loadings <- as.numeric(fa_out$loadings[, 1])
@@ -190,7 +211,11 @@ unidimensionality_diagnostics <- unidimensionality_results %>%
 
 pa_table <- lapply(unidimensionality_diagnostics, function(prefix) {
   df <- processed %>% dplyr::select(starts_with(prefix))
-  pa <- psych::fa.parallel(df, fa="fa", fm="minres", plot=FALSE)
+  pa <- psych::fa.parallel(df, 
+                           fa= "fa", 
+                           fm= "wls", 
+                           cor = "poly",
+                           plot=FALSE)
   
   data.frame(
     prefix = prefix,
@@ -223,9 +248,9 @@ fit_single_factor_cfa <- function(data, survey_prefix) {
   fit <- cfa(
     model,
     data = data,
-    estimator = "MLR",
+    estimator = "WLSMV",
     std.lv = TRUE,
-    missing = "fiml"
+    ordered = TRUE
   )
   
   list(
@@ -278,6 +303,8 @@ ave_table <- map_df(
       mutate(survey = gsub("_", "", survey))
   }
 )
+
+
 ```
 
 ### Divergent validity
@@ -298,14 +325,16 @@ demands_first_order = '
   rla =~ rla_1 + rla_2 + rla_3 + rla_4 + rla_5 + rla_6
   wlb =~ wlb_1 + wlb_2 + wlb_3 + wlb_4
   pps =~ pps_1 + pps_2 + pps_3 + pps_4 + pps_5 + pps_6
-  ppa =~ ppa_7 + ppa_8 + ppa_9 + ppa_10 + ppa_11 + ppa_12
 '
 
 
-run_discriminant_validity <- function(model_syntax, cutoff = 0.7) {
+run_discriminant_validity <- function(model_syntax, cutoff = 0.8) {
   fit <- cfa(
     model_syntax,
     data = processed,
+    estimator = "WLSMV",
+    std.lv = TRUE,
+    ordered = TRUE,
     check.lv.names = FALSE
   )
   
@@ -350,7 +379,8 @@ multi_cfa_model <- build_multifactor_cfa(processed, surveys, items)
 multi_cfa_fit <- cfa(
   multi_cfa_model,
   data = processed,
-  estimator = "MLR",
+  estimator = "WLSMV",
+  ordered = TRUE,
   std.lv = TRUE,
   check.lv.names = FALSE
 )
@@ -390,16 +420,18 @@ ave_pairs <- ave_pairs %>%
 ### Multicollinearity
 
 ```{r}
-correlation_matrix <- processed %>%
+correlation_matrix <- data %>%
   dplyr::select(all_of(surveys)) %>%
-  cor(use = "pairwise.complete.obs") %>%
+  cor(use = "pairwise.complete.obs", method = "spearman") %>%
   round(2)
 
 correlation_matrix[abs(correlation_matrix) < 0.50] <- NA
 correlation_matrix <- as.data.frame(correlation_matrix)
 
-lm_vif <- lm(brt ~ wld + rla + wlb + pps + ppr + ppa + opp + mng + inf + scs + scc + sec, data = processed)
+lm_vif <- lm(brt ~ wld + rla + wlb + pps + ppr + ppa + opp + mng + inf + scs + scc + sec, data = data)
 vif(lm_vif)
+
+
 
 # No multicollinearity issues detected (all correlations < 0.70)
 ```
@@ -407,7 +439,7 @@ vif(lm_vif)
 ### Linearity
 
 ```{r}
-linearity_data <- processed |>
+linearity_data <- data |>
   dplyr::mutate(
     job_demands_total = rowMeans(dplyr::select(cur_data(), wld, rla, wlb), na.rm = TRUE),
     job_resources_total = rowMeans(dplyr::select(cur_data(), opp, mng, inf, scs, scc, sec), na.rm = TRUE),
@@ -448,7 +480,7 @@ plot(lm1, which = 2)
 ### Underperforming constructs
 
 ```{r}
-underperforming_scales = c("rlc", "pps", "ppa")
+underperforming_scales = c("pps")
 
 # Detailed CFA
 underperforming_cfa_results <- lapply(underperforming_scales, function(survey) {
@@ -465,16 +497,6 @@ fit_list <- lapply(underperforming_cfa_results, function(x) {
 
 fit_df <- do.call(rbind, fit_list)
 
-# Fit EFA for  RLC
-
-rlc_fit_1 = efa(processed, ov.names = c("rlc_1", "rlc_2", "rlc_3", "rlc_4", "rlc_5", "rlc_6"), nfactors = 1, rotation = "oblimin")
-rlc_fit_2 = efa(processed, ov.names = c("rlc_1", "rlc_2", "rlc_3", "rlc_4", "rlc_5", "rlc_6"), nfactors = 2, rotation = "oblimin")
-summary(rlc_fit_1)
-summary(rlc_fit_2)
-fitMeasures(rlc_fit_1, "bic")
-fitMeasures(rlc_fit_2, "bic")
-
-# Two factor model is better for RLC based on BIC and fit indices, however, it has no theoretical grounding. No changes are made.
 ```
 
 ## Construct- and factor-level analyses
@@ -482,58 +504,58 @@ fitMeasures(rlc_fit_2, "bic")
 ### Measurement model
 
 ```{r}
-# Excluding aggregated constructs
-
-jdr_measurement_items = processed %>% 
-  dplyr::select(starts_with(c(items)))
-
-
-jdr_measurement_model <- '
+jdr_measurement_model_test <- '
   # First-order factors
   wld =~ wld_1 + wld_2 + wld_3 + wld_4
   rla =~ rla_1 + rla_2 + rla_3 + rla_4 + rla_5 + rla_6
   wlb =~ wlb_1 + wlb_2 + wlb_3 + wlb_4
-
   
   opp =~ opp_1 + opp_2 + opp_3
   mng =~ mng_1 + mng_2 
   inf =~ inf_1 + inf_2 + inf_3 + inf_4 + inf_5 + inf_6
-  scs =~ scs_1 + scs_2 + scs_3 
-  scc =~ scc_1 + scc_2 + scc_3
+  soc =~ scc_1 + scc_2 + scc_3 + scs_1 + scs_2 + scs_3
   sec =~ sec_1 + sec_2 + sec_3 + sec_4
-  
+
   burnout =~ brt_1 + brt_2 + brt_3 + brt_4
   
+  # Job Resources
+  job_resources =~ opp + mng + inf + soc + sec
+
   # Job Demands
   job_demands =~ wld + rla + wlb
-
-  # Job Resources
-  job_resources =~ opp + mng + inf + scs + scc + sec
+  
+  # burnout is regressed on job demands and job resources
+  burnout ~ job_demands + job_resources
   
   # Allowing latent factors to correlate
   job_demands ~~ job_resources
-  
-  # burnout is regressed on job demands and job resources
-  job_demands ~ burnout
-  job_resources ~ burnout
-  
+
   # Allowing theoretically related indicators and factors to correlate
-  scs ~~ scc
   rla_5 ~~ rla_6
 '
 
-jdr_measurement_fit <- sem(
-  jdr_measurement_model,
-  data = jdr_measurement_items,
-  estimator = "MLR",
+jdr_measurement_fit_test <- sem(
+  jdr_measurement_model_test,
+  data = processed,
+  estimator = "WLSMV",
+  ordered = TRUE,
   check.lv.names = FALSE,
   std.lv = TRUE
 )
 
-summary(jdr_measurement_fit, fit.measures = TRUE, standardized = TRUE)
+jdr_measurement_fit <- sem(
+  jdr_measurement_model_test,
+  data = data,
+  estimator = "MLR",
+  check.lv.names = FALSE,
+  std.lv = TRUE,
+  missing = 'fiml'
+)
 
-modificationIndices(jdr_measurement_fit, sort. = TRUE, maximum.number = 10)
-lavaan::inspect(jdr_measurement_fit_missing, 'coverage')
+summary(jdr_measurement_fit, fit.measures = TRUE, standardized = TRUE)
+lavInspect(jdr_measurement_fit_test, "cov.lv")
+
+modificationIndices(jdr_measurement_fit_test, sort. = TRUE, maximum.number = 10)
 ```
 
 ### Composite SEM
@@ -541,10 +563,10 @@ lavaan::inspect(jdr_measurement_fit_missing, 'coverage')
 ```{r}
 jdr_composite_model <- '
   # Job Demands
-  job_demands =~ wld + rla + wlb
+  job_demands =~ wld + rla + wlb + pps
 
   # Job Resources
-  job_resources =~ opp + mng + inf + scs + scc + sec
+  job_resources =~ opp + mng + inf + scs + scc + sec + ppr
   
   # Allowing latent factors to correlate
   job_demands ~~ job_resources
@@ -558,7 +580,7 @@ jdr_composite_model <- '
 
 jdr_composite_fit <- sem(
   jdr_composite_model,
-  data = processed,
+  data = data,
   estimator = "MLR",
   std.lv = TRUE
 )
@@ -570,7 +592,7 @@ summary(jdr_composite_fit, fit.measures = TRUE, standardized = TRUE)
 ### Common method variance
 
 ```{r}
-constructs = processed[, c("brt",
+constructs = data[, c("brt", "pps", "ppr",
               "wld", "rla", "wlb",
               "opp", "mng", "inf", "scc", "scs", "sec")]
 
@@ -593,20 +615,23 @@ resources_factor =   '
   scs =~ scs_1 + scs_2 + scs_3 
   scc =~ scc_1 + scc_2 + scc_3
   sec =~ sec_1 + sec_2 + sec_3 + sec_4
+  ppr =~ ppr_13 + ppr_14 + ppr_15 + ppr_16 + ppr_17 + ppr_18
 
   # Job Resources
-  job_resources =~ opp + mng + inf + scs + scc + sec
+  job_resources =~ opp + mng + inf + scs + scc + sec + ppr
+  
+  scs ~~ scc
 '
 
 jdr_resources_fit <- sem(
   resources_factor,
   data = processed,
-  estimator = "MLR",
+  estimator = "WLSMV",
+  std.lv = TRUE,
   check.lv.names = FALSE
 )
 
-summary(jdr_resources_fit)
-
+summary(jdr_resources_fit, fit.measures = TRUE, standardized = TRUE)
 semTools::compRelSEM(jdr_resources_fit, tau.eq = FALSE, higher = c("job_resources"))
 
 
@@ -615,18 +640,21 @@ demands_factor = '
   wld =~ wld_1 + wld_2 + wld_3 + wld_4
   rla =~ rla_1 + rla_2 + rla_3 + rla_4 + rla_5 + rla_6
   wlb =~ wlb_1 + wlb_2 + wlb_3 + wlb_4
+  pps =~ pps_1 + pps_2 + pps_3 + pps_4 + pps_5 + pps_6
   
   # Job Demands
-  job_demands =~ wld + rla + wlb
+  job_demands =~ wld + rla + wlb + pps
 '
 
 jdr_demands_fit <- lavaan::sem(
   demands_factor,
   data = processed,
-  estimator = "MLR",
+  estimator = "WLSMV",
+  std.lv = TRUE,
   check.lv.names = FALSE
 )
 
+summary(jdr_demands_fit, fit.measures = TRUE, standardized = TRUE)
 semTools::compRelSEM(jdr_demands_fit, tau.eq = FALSE, higher = c("job_demands"), return.df = TRUE)
 ```
 
@@ -707,37 +735,37 @@ AVE2_raw(jdr_demands_fit, "job_demands")
 ### Outlier detection
 
 ```{r}
-cooks_d <- genCookDist(jdr_measurement_fit, data = processed, check.lv.names = FALSE)
+cooks_d <- genCookDist(jdr_measurement_fit_test, data = processed, check.lv.names = FALSE)
 
 outlier_df <- processed %>%
   mutate(
     id = seq_len(nrow(.)),
     cooks_d = cooks_d,
-    is_outlier_cooks = cooks_d > 1   # or 0.5 depending on preference
+    is_outlier_cooks = cooks_d > 10   # or 0.5 depending on preference
   )
 
-plot(outlier_df$cooks_d, type = "h", main = "Cook's Distance", ylab = "Cook's Distance")
+plot(outlier_df$cooks_d, type = "h", main = "Cook's Distance", ylab = "Cook's Distance", ylim = c(0, 50))
 
 # Sensivity analysis
 
 data_no_outliers <- outlier_df %>% 
   filter(!is_outlier_cooks) %>% 
-  dplyr::select(-c(cooks_d, is_outlier_cooks))  # remove diagnostics columns
-
+  dplyr::select(-c(cooks_d, is_outlier_cooks))
 
 # Refit the model without outliers
 
-fit_no_outlier <- sem(model = jdr_measurement_fit,
+fit_no_outlier <- sem(model = jdr_measurement_fit_test,
                 data = data_no_outliers,
                 std.lv = TRUE,
-                estimator = "MLR",
+                ordered = TRUE,
+                estimator = "WLSMV",
                 verbose = TRUE)
 
 summary(fit_no_outlier, fit.measures = TRUE, standardized = TRUE, modindices = FALSE, rsquare = FALSE)
-summary(jdr_measurement_fit, fit.measures = TRUE, standardized = TRUE, modindices = FALSE, rsquare = FALSE)
+summary(jdr_measurement_fit_test, fit.measures = TRUE, standardized = TRUE, modindices = FALSE, rsquare = FALSE)
 
 
-anova(jdr_measurement_fit, fit_no_outlier)
+anova(jdr_measurement_fit_test, fit_no_outlier)
 ```
 
 ### Power analysis for target effect using pwrSEM
@@ -750,27 +778,17 @@ pwrsem_loadings = standardizedSolution(jdr_measurement_fit) %>%
 pwrsem_reg_coefs <- standardizedSolution(jdr_measurement_fit) |>
   subset(op == "~", select = c("lhs","rhs","est.std"))
 
-pwrsem_res_variances <- as.data.frame(lavaan::inspect(jdr_measurement_fit, "std.all")$lambda)
+pe <- parameterEstimates(jdr_measurement_fit)
+pwrsem_res_variances <- pe %>%
+  dplyr::select(rhs ,est)
 
-write.csv(pwrsem_loadings, "pwrsem_loadings.csv")
-write.csv(pwrsem_reg_coefs, "pwrsem_reg_coefs.csv")
-write.csv(pwrsem_res_variances, "pwrsem_res_variances.csv")
+
+write.csv(pwrsem_loadings, here::here("data/processed/pwrsem_loadings.csv"))
+write.csv(pwrsem_reg_coefs, here::here("data/processed/pwrsem_reg_coefs.csv"))
+write.csv(pwrsem_res_variances, here::here("data/processed/pwrsem_res_variances.csv"))
 ```
 
 ### Power analysis for global fit
-
-```{r}
-popModel <- model.lavaan(jdr_measurement_fit)
-
-out <- sim(
-  nRep = 100,
-  model = jdr_measurement_fit,         
-  generate = popModel,
-  n = 400     
-)
-summary(out)
-
-```
 
 ```{r}
 population_model <- fitted(jdr_measurement_fit)$cov
@@ -784,27 +802,24 @@ hypothethised_model_structure_dem <- '
   opp =~ opp_1 + opp_2 + opp_3
   mng =~ mng_1 + mng_2 
   inf =~ inf_1 + inf_2 + inf_3 + inf_4 + inf_5 + inf_6
-  scs =~ scs_1 + scs_2 + scs_3 
-  scc =~ scc_1 + scc_2 + scc_3
+  soc =~ scc_1 + scc_2 + scc_3 + scs_1 + scs_2 + scs_3
   sec =~ sec_1 + sec_2 + sec_3 + sec_4
-  
+
   burnout =~ brt_1 + brt_2 + brt_3 + brt_4
   
+  # Job Resources
+  job_resources =~ opp + mng + inf + soc + sec
+
   # Job Demands
   job_demands =~ wld + rla + wlb
-
-  # Job Resources
-  job_resources =~ opp + mng + inf + scs + scc + sec
+  
+  # burnout is regressed on job demands and job resources
+  burnout ~ %f*job_demands + job_resources
   
   # Allowing latent factors to correlate
   job_demands ~~ job_resources
-  
-  # burnout is regressed on job demands and job resources
-  job_demands ~ %f*burnout
-  job_resources ~ burnout
-  
+
   # Allowing theoretically related indicators and factors to correlate
-  scs ~~ scc
   rla_5 ~~ rla_6
 '
 
@@ -834,8 +849,9 @@ compute_power <- function(beta_dem, Sigma_H1) {
     SigmaHat = h0$Sigma_H0,
     Sigma    = Sigma_H1,
     alpha    = 0.05,
-    power    = 0.80,
-    df       = h0$df_H0
+    power    = 0.90,
+    df       = h0$df_H0,
+    fittingFunction = "WLS"
   )
   
   out$requiredN
@@ -862,27 +878,24 @@ hypothethised_model_structure_res <- '
   opp =~ opp_1 + opp_2 + opp_3
   mng =~ mng_1 + mng_2 
   inf =~ inf_1 + inf_2 + inf_3 + inf_4 + inf_5 + inf_6
-  scs =~ scs_1 + scs_2 + scs_3 
-  scc =~ scc_1 + scc_2 + scc_3
+  soc =~ scc_1 + scc_2 + scc_3 + scs_1 + scs_2 + scs_3
   sec =~ sec_1 + sec_2 + sec_3 + sec_4
-  
+
   burnout =~ brt_1 + brt_2 + brt_3 + brt_4
   
+  # Job Resources
+  job_resources =~ opp + mng + inf + soc + sec
+
   # Job Demands
   job_demands =~ wld + rla + wlb
-
-  # Job Resources
-  job_resources =~ opp + mng + inf + scs + scc + sec
+  
+  # burnout is regressed on job demands and job resources
+  burnout ~ job_demands + %f*job_resources
   
   # Allowing latent factors to correlate
   job_demands ~~ job_resources
-  
-  # burnout is regressed on job demands and job resources
-  job_demands ~ burnout
-  job_resources ~ %f*burnout
-  
+
   # Allowing theoretically related indicators and factors to correlate
-  scs ~~ scc
   rla_5 ~~ rla_6
 '
 
@@ -912,8 +925,9 @@ compute_power <- function(beta_res, Sigma_H1) {
     SigmaHat = h0$Sigma_H0,
     Sigma    = Sigma_H1,
     alpha    = 0.05,
-    power    = 0.80,
-    df       = h0$df_H0
+    power    = 0.90,
+    df       = h0$df_H0,
+    fittingFunction = "WLS"
   )
   
   out$requiredN
@@ -937,61 +951,87 @@ results_dem
 power_estimates = results_res %>% 
   full_join(results_dem) %>% 
   select(beta_res, beta_dem, requiredN)
-
 ```
 
 # testing
 
 ```{r}
-jdr_measurement_model <- '
-  # First-order factors
-  pps =~ pps_1 + pps_2 + pps_3 + pps_4 + pps_5 + pps_6
-  ppa =~ ppa_7 + ppa_8 + ppa_9 + ppa_10 + ppa_11 + ppa_12
-  wld =~ wld_1 + wld_2 + wld_3 + wld_4
-  rla =~ rla_1 + rla_2 + rla_3 + rla_4 + rla_5 + rla_6
-  wlb =~ wlb_1 + wlb_2 + wlb_3 + wlb_4
+library(janitor)
+burnout = readxl::read_xlsx(here::here("data/raw/bat_12.xlsx"), range = "B1:O3000")
 
-  
-  opp =~ opp_1 + opp_2 + opp_3
-  mng =~ mng_1 + mng_2 
-  inf =~ inf_1 + inf_2 + inf_3 + inf_4 + inf_5 + inf_6
-  scs =~ scs_1 + scs_2 + scs_3 
-  scc =~ scc_1 + scc_2 + scc_3
-  sec =~ sec_1 + sec_2 + sec_3 + sec_4
-  
-  burnout =~ brt_1 + brt_2 + brt_3 + brt_4
-  
-  # Job Resources
-  job_resources =~ opp + mng + inf + scs + scc + sec
-  
-  # Job Demands
-  job_demands =~ wld + rla + wlb + ppa
-  
-  # burnout is regressed on job demands and job resources
-  burnout ~  pps + job_demands + job_resources
-  
-  # Allowing latent factors to correlate
-  job_demands ~~ job_resources
-  job_demands ~~ pps
-  
-  # Allowing theoretically related indicators and factors to correlate
-  scs ~~ scc
-  rla_5 ~~ rla_6
-  ppa_10 ~~ ppa_12
-  ppa_8 ~~ ppa_9
-'
+burnout = burnout %>% 
+  row_to_names(row_number = 1)
+colnames(burnout) = str_sub(colnames(burnout), 3)
 
-jdr_measurement_fit <- sem(
-  jdr_measurement_model,
-  data = processed,
-  estimator = "MLR",
-  missing = 'fiml',
+burnout_model = '
+ ex =~ EX1 + EX3 + EX4
+ md =~ MD1 + MD3 + MD5
+ cc =~ CC1 + CC4 + CC5
+ ec =~ EC1 + EC2 + EC5
+ 
+ burnout =~ ex + md + cc + ec
+ '
+
+burnout_fit = cfa(
+  burnout_model,
+  burnout,
+  estimator = "WLSMV",
+  ordered = TRUE,
   check.lv.names = FALSE,
   std.lv = TRUE
 )
 
-summary(jdr_measurement_fit, fit.measures = TRUE, standardized = TRUE)
-lavaan::inspect(jdr_measurement_fit, 'cor.lv')
-modificationindices(jdr_measurement_fit, sort. = TRUE)
+summary(burnout_fit, fit.measures = TRUE, standardized = TRUE)
+
+burnout = burnout %>% 
+  slice(1:202)
+
+combined <- cbind(processed, burnout)
+
+get_df_model = '
+ # First-order factors
+  wld =~ wld_1 + wld_2 + wld_3 + wld_4
+  rla =~ rla_1 + rla_2 + rla_3 + rla_4 + rla_5 + rla_6
+  wlb =~ wlb_1 + wlb_2 + wlb_3 + wlb_4
+  
+  opp =~ opp_1 + opp_2 + opp_3
+  mng =~ mng_1 + mng_2 
+  inf =~ inf_1 + inf_2 + inf_3 + inf_4 + inf_5 + inf_6
+  soc =~ scc_1 + scc_2 + scc_3 + scs_1 + scs_2 + scs_3
+  sec =~ sec_1 + sec_2 + sec_3 + sec_4
+
+  ex =~ EX1 + EX3 + EX4
+ md =~ MD1 + MD3 + MD5
+ cc =~ CC1 + CC4 + CC5
+ ec =~ EC1 + EC2 + EC5
+ 
+ burnout =~ ex + md + cc + ec
+  
+  # Job Resources
+  job_resources =~ opp + mng + inf + soc + sec
+
+  # Job Demands
+  job_demands =~ wld + rla + wlb
+  
+  # burnout is regressed on job demands and job resources
+  burnout ~ job_demands + job_resources
+  
+  # Allowing latent factors to correlate
+  job_demands ~~ job_resources
+
+  # Allowing theoretically related indicators and factors to correlate
+  rla_5 ~~ rla_6
+  '
+
+test_fit = cfa(
+  get_df_model,
+  combined, 
+  estimator = "WLSMV",
+  ordered = TRUE,
+  check.lv.names = FALSE,
+  std.lv = TRUE
+)
+
+summary(test_fit)
 ```
 

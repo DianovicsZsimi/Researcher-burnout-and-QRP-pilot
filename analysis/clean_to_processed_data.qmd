@@ -129,15 +129,58 @@ for (column in pp_columns) {
 
 pp_stress_subscale = pp_data |> 
   dplyr::select(pp_1:pp_6, anonym_id) |> 
-  rename_with(~str_replace(., "pp", "pps"))
+  rename_with(~str_replace(., "pp", "pps")) %>% 
+  rowwise() %>%
+  mutate(
+    validity = case_when(
+      # Rule 1: all NA → keep person
+      all(is.na(c_across(starts_with("pps")))) ~ "valid",
+      
+      # Rule 2: all items identical (and not all NA) → invalid
+      n_distinct(na.omit(c_across(starts_with("pps")))) == 1 ~ "invalid",
+      
+      # Rule 3: otherwise valid
+      TRUE ~ "valid"
+    )
+  ) %>%
+  ungroup()
 
 pp_attitude_subscale = pp_data |> 
   dplyr::select(pp_7:pp_12, anonym_id) |> 
-  rename_with(~str_replace(., "pp", "ppa"))
+  rename_with(~str_replace(., "pp", "ppa")) %>% 
+  rowwise() %>%
+  mutate(
+    validity = case_when(
+      # Rule 1: all NA → keep person
+      all(is.na(c_across(starts_with("ppa")))) ~ "valid",
+      
+      # Rule 2: all items identical (and not all NA) → invalid
+      n_distinct(na.omit(c_across(starts_with("ppa")))) == 1 ~ "invalid",
+      
+      # Rule 3: otherwise valid
+      TRUE ~ "valid"
+    )
+  ) %>%
+  ungroup()
+
 
 pp_resources_subscale = pp_data |> 
   dplyr::select(pp_13:pp_18, anonym_id) |> 
-  rename_with(~str_replace(., "pp", "ppr"))
+  rename_with(~str_replace(., "pp", "ppr")) %>% 
+  rowwise() %>%
+  mutate(
+    validity = case_when(
+      # Rule 1: all NA → keep person
+      all(is.na(c_across(starts_with("ppr")))) ~ "valid",
+      
+      # Rule 2: all items identical (and not all NA) → invalid
+      n_distinct(na.omit(c_across(starts_with("ppr")))) == 1 ~ "invalid",
+      
+      # Rule 3: otherwise valid
+      TRUE ~ "valid"
+    )
+  ) %>%
+  ungroup()
 
 #Reverse coded items for stress: 5, 6; for attitude: 11; resources: 16, 17
 
@@ -203,6 +246,22 @@ for (column in jis_columns) {
   )
 }
 
+jis_data = jis_data %>% 
+  rowwise() %>%
+  mutate(
+    validity = case_when(
+      # Rule 1: all NA → keep person
+      all(is.na(c_across(starts_with("sec")))) ~ "valid",
+      
+      # Rule 2: all items identical (and not all NA) → invalid
+      n_distinct(na.omit(c_across(starts_with("sec")))) == 1 ~ "invalid",
+      
+      # Rule 3: otherwise valid
+      TRUE ~ "valid"
+    )
+  ) %>%
+  ungroup()
+
 #Reverse coded items: jis_2 --> jis_1, jis_3, jis_4
 #Wrong recoding direction: The higher the score, the higher job security should be, so the job resources latent variable is consistent
 reverse_jis_columns = c("sec_1", "sec_3", "sec_4")
@@ -239,6 +298,22 @@ for (column in wlb_columns) {
     renamed_data[[column]] == "Strongly agree" ~ 5
   )
 }
+
+wlb_data = wlb_data %>% 
+  rowwise() %>%
+  mutate(
+    validity = case_when(
+      # Rule 1: all NA → keep person
+      all(is.na(c_across(starts_with("wlb")))) ~ "valid",
+      
+      # Rule 2: all items identical (and not all NA) → invalid
+      n_distinct(na.omit(c_across(starts_with("wlb")))) == 1 ~ "invalid",
+      
+      # Rule 3: otherwise valid
+      TRUE ~ "valid"
+    )
+  ) %>%
+  ungroup()
 
 #Reverse coded item: wlb_2 --> wlb_1, wlb_3, wlb_4
 #Wrong recoding direction: The higher the score, the higher work life imbalance should be, so the job demands latent variable is consistent
@@ -278,6 +353,22 @@ for (column in workload_columns) {
 }
 
 #Reverse coded item: wld_4
+
+workload_data = workload_data %>% 
+  rowwise() %>%
+  mutate(
+    validity = case_when(
+      # Rule 1: all NA → keep person
+      all(is.na(c_across(starts_with("wld")))) ~ "valid",
+      
+      # Rule 2: all items identical (and not all NA) → invalid
+      n_distinct(na.omit(c_across(starts_with("wld")))) == 1 ~ "invalid",
+      
+      # Rule 3: otherwise valid
+      TRUE ~ "valid"
+    )
+  ) %>%
+  ungroup()
 
 workload_data_reversed = workload_data |> 
   mutate(wld_4 = case_when(
@@ -443,6 +534,22 @@ for (column in role_stressor_columns) {
 reverse_stressor_columns = c("rl_1", "rl_3", "rl_4", 
                               "rl_6", "rl_8", "rl_11")
 
+role_stressor_data = role_stressor_data %>% 
+  rowwise() %>%
+  mutate(
+    validity = case_when(
+      # Rule 1: all NA → keep person
+      all(is.na(c_across(starts_with("rl")))) ~ "valid",
+      
+      # Rule 2: all items identical (and not all NA) → invalid
+      n_distinct(na.omit(c_across(starts_with("rl")))) == 1 ~ "invalid",
+      
+      # Rule 3: otherwise valid
+      TRUE ~ "valid"
+    )
+  ) %>%
+  ungroup()
+
 role_stressor_data_reversed = role_stressor_data
 
 for (col in reverse_stressor_columns) {
@@ -578,6 +685,26 @@ survey_data = burnout_data |>
   relocate(anonym_id, .before = brt_1)
 ```
 
+```{r}
+validity_cols <- grep("valid", names(survey_data), value = TRUE)
+
+survey_data <- survey_data %>%
+  rowwise() %>%
+  mutate(
+    overall_validity = if_else(
+      any(c_across(all_of(validity_cols)) == "invalid"),
+      "invalid",
+      "valid"
+    )
+  ) %>%
+  ungroup()
+
+survey_data_clean <- survey_data %>%
+  filter(overall_validity == "valid") %>% 
+  select(-contains("valid"))
+```
+
+
 ### Save descriptive data in another dataframe
 
 ```{r}
@@ -588,7 +715,7 @@ descriptive_data = renamed_data |>
 ### Join descriptive and survey data
 
 ```{r}
-processed_data = survey_data |> 
+processed_data = survey_data_clean |> 
   left_join(descriptive_data, by = "anonym_id")
 ```
 
