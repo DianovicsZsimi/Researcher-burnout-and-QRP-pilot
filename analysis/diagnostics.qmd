@@ -33,6 +33,7 @@ library(car)
 library(lavaan)
 library(influence.SEM)
 library(simsem)
+library(janitor)
 
 data_path <- here("data")
 ```
@@ -71,6 +72,8 @@ processed <- data %>%
     wld_1 = ordered(wld_1, levels = c(2, 3, 4, 5))
   ) %>% 
   dplyr::select(contains(items))
+
+# wld_1 does not have any responses for option 1, so it is reordered.
 ```
 
 ## Item-level analyses
@@ -431,8 +434,6 @@ correlation_matrix <- as.data.frame(correlation_matrix)
 lm_vif <- lm(brt ~ wld + rla + wlb + pps + ppr + ppa + opp + mng + inf + scs + scc + sec, data = data)
 vif(lm_vif)
 
-
-
 # No multicollinearity issues detected (all correlations < 0.70)
 ```
 
@@ -529,9 +530,6 @@ jdr_measurement_model_test <- '
   
   # Allowing latent factors to correlate
   job_demands ~~ job_resources
-  
-  #
-  rla_5 ~~ rla_6
 '
 
 jdr_measurement_fit <- sem(
@@ -563,26 +561,24 @@ modificationIndices(jdr_measurement_fit, sort. = TRUE, maximum.number = 10)
 ```{r}
 jdr_composite_model <- '
   # Job Demands
-  job_demands =~ wld + rla + wlb + pps
+  job_demands =~ wld + rla + wlb
 
   # Job Resources
-  job_resources =~ opp + mng + inf + scs + scc + sec + ppr
+  job_resources =~ opp + mng + inf + soc + sec
   
   # Allowing latent factors to correlate
   job_demands ~~ job_resources
   
   # burnout is regressed on job demands and job resources
   brt ~ job_demands + job_resources
-  
-  # Allowing theoretically related indicators to correlate
-  scs ~~ scc
 '
 
 jdr_composite_fit <- sem(
   jdr_composite_model,
-  data = data,
+  data = processed,
   estimator = "MLR",
-  std.lv = TRUE
+  std.lv = TRUE,
+  missing = 'fiml'
 )
 
 summary(jdr_composite_fit, fit.measures = TRUE, standardized = TRUE)
@@ -612,15 +608,12 @@ resources_factor =   '
   opp =~ opp_1 + opp_2 + opp_3
   mng =~ mng_1 + mng_2 
   inf =~ inf_1 + inf_2 + inf_3 + inf_4 + inf_5 + inf_6
-  scs =~ scs_1 + scs_2 + scs_3 
-  scc =~ scc_1 + scc_2 + scc_3
+  soc =~ soc_1 + soc_2 + soc_3 + soc_4 + soc_5 + soc_6
   sec =~ sec_1 + sec_2 + sec_3 + sec_4
-  ppr =~ ppr_13 + ppr_14 + ppr_15 + ppr_16 + ppr_17 + ppr_18
 
   # Job Resources
-  job_resources =~ opp + mng + inf + scs + scc + sec + ppr
-  
-  scs ~~ scc
+  job_resources =~ opp + mng + inf + soc + sec
+
 '
 
 jdr_resources_fit <- sem(
@@ -628,6 +621,7 @@ jdr_resources_fit <- sem(
   data = processed,
   estimator = "WLSMV",
   std.lv = TRUE,
+  ordered = TRUE,
   check.lv.names = FALSE
 )
 
@@ -640,10 +634,9 @@ demands_factor = '
   wld =~ wld_1 + wld_2 + wld_3 + wld_4
   rla =~ rla_1 + rla_2 + rla_3 + rla_4 + rla_5 + rla_6
   wlb =~ wlb_1 + wlb_2 + wlb_3 + wlb_4
-  pps =~ pps_1 + pps_2 + pps_3 + pps_4 + pps_5 + pps_6
   
   # Job Demands
-  job_demands =~ wld + rla + wlb + pps
+  job_demands =~ wld + rla + wlb
 '
 
 jdr_demands_fit <- lavaan::sem(
@@ -651,6 +644,7 @@ jdr_demands_fit <- lavaan::sem(
   data = processed,
   estimator = "WLSMV",
   std.lv = TRUE,
+  ordered = TRUE,
   check.lv.names = FALSE
 )
 
@@ -952,10 +946,10 @@ power_estimates = results_res %>%
   select(beta_res, beta_dem, requiredN)
 ```
 
-# testing
+# Testing factor structure of BAT-12 from original publication
 
 ```{r}
-library(janitor)
+
 burnout = readxl::read_xlsx(here::here("data/raw/bat_12.xlsx"), range = "B1:O3000")
 
 burnout = burnout %>% 

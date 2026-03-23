@@ -133,10 +133,10 @@ pp_stress_subscale = pp_data |>
   rowwise() %>%
   mutate(
     validity = case_when(
-      # Rule 1: all NA → keep person
+      # Rule 1: if participant did not fill out questionnaire: valid
       all(is.na(c_across(starts_with("pps")))) ~ "valid",
       
-      # Rule 2: all items identical (and not all NA) → invalid
+      # Rule 2: if all items are identical: invalid
       n_distinct(na.omit(c_across(starts_with("pps")))) == 1 ~ "invalid",
       
       # Rule 3: otherwise valid
@@ -151,13 +151,8 @@ pp_attitude_subscale = pp_data |>
   rowwise() %>%
   mutate(
     validity = case_when(
-      # Rule 1: all NA → keep person
       all(is.na(c_across(starts_with("ppa")))) ~ "valid",
-      
-      # Rule 2: all items identical (and not all NA) → invalid
       n_distinct(na.omit(c_across(starts_with("ppa")))) == 1 ~ "invalid",
-      
-      # Rule 3: otherwise valid
       TRUE ~ "valid"
     )
   ) %>%
@@ -170,13 +165,8 @@ pp_resources_subscale = pp_data |>
   rowwise() %>%
   mutate(
     validity = case_when(
-      # Rule 1: all NA → keep person
       all(is.na(c_across(starts_with("ppr")))) ~ "valid",
-      
-      # Rule 2: all items identical (and not all NA) → invalid
       n_distinct(na.omit(c_across(starts_with("ppr")))) == 1 ~ "invalid",
-      
-      # Rule 3: otherwise valid
       TRUE ~ "valid"
     )
   ) %>%
@@ -250,13 +240,8 @@ jis_data = jis_data %>%
   rowwise() %>%
   mutate(
     validity = case_when(
-      # Rule 1: all NA → keep person
       all(is.na(c_across(starts_with("sec")))) ~ "valid",
-      
-      # Rule 2: all items identical (and not all NA) → invalid
       n_distinct(na.omit(c_across(starts_with("sec")))) == 1 ~ "invalid",
-      
-      # Rule 3: otherwise valid
       TRUE ~ "valid"
     )
   ) %>%
@@ -303,13 +288,8 @@ wlb_data = wlb_data %>%
   rowwise() %>%
   mutate(
     validity = case_when(
-      # Rule 1: all NA → keep person
       all(is.na(c_across(starts_with("wlb")))) ~ "valid",
-      
-      # Rule 2: all items identical (and not all NA) → invalid
       n_distinct(na.omit(c_across(starts_with("wlb")))) == 1 ~ "invalid",
-      
-      # Rule 3: otherwise valid
       TRUE ~ "valid"
     )
   ) %>%
@@ -358,13 +338,8 @@ workload_data = workload_data %>%
   rowwise() %>%
   mutate(
     validity = case_when(
-      # Rule 1: all NA → keep person
       all(is.na(c_across(starts_with("wld")))) ~ "valid",
-      
-      # Rule 2: all items identical (and not all NA) → invalid
       n_distinct(na.omit(c_across(starts_with("wld")))) == 1 ~ "invalid",
-      
-      # Rule 3: otherwise valid
       TRUE ~ "valid"
     )
   ) %>%
@@ -538,13 +513,8 @@ role_stressor_data = role_stressor_data %>%
   rowwise() %>%
   mutate(
     validity = case_when(
-      # Rule 1: all NA → keep person
       all(is.na(c_across(starts_with("rl")))) ~ "valid",
-      
-      # Rule 2: all items identical (and not all NA) → invalid
       n_distinct(na.omit(c_across(starts_with("rl")))) == 1 ~ "invalid",
-      
-      # Rule 3: otherwise valid
       TRUE ~ "valid"
     )
   ) %>%
