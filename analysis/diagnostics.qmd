@@ -22,6 +22,7 @@ if(!require("lavaan")) install.packages("lavaan")
 if(!require("influence.SEM")) install.packages("influence.SEM")
 if(!require("simsem")) install.packages("simsem")
 if(!require("tidyverse")) install.packages("tidyverse")
+if(!require("janitor")) install.packages("janitor")
 
 library(tidyverse)
 library(here)
@@ -541,14 +542,14 @@ jdr_measurement_fit <- sem(
   std.lv = TRUE
 )
 
-jdr_measurement_fit <- sem(
-  jdr_measurement_model_test,
-  data = data,
-  estimator = "MLR",
-  check.lv.names = FALSE,
-  std.lv = TRUE,
-  missing = 'fiml'
-)
+# jdr_measurement_fit <- sem(
+#   jdr_measurement_model_test,
+#   data = data,
+#   estimator = "MLR",
+#   check.lv.names = FALSE,
+#   std.lv = TRUE,
+#   missing = 'fiml'
+# )
 
 summary(jdr_measurement_fit, fit.measures = TRUE, standardized = TRUE)
 lavInspect(jdr_measurement_fit, "cov.lv")
@@ -559,6 +560,9 @@ modificationIndices(jdr_measurement_fit, sort. = TRUE, maximum.number = 10)
 ### Composite SEM
 
 ```{r}
+data <- data %>% 
+  mutate(soc = rowMeans(across(c(scs, scc)), na.rm = TRUE))
+
 jdr_composite_model <- '
   # Job Demands
   job_demands =~ wld + rla + wlb
@@ -575,7 +579,7 @@ jdr_composite_model <- '
 
 jdr_composite_fit <- sem(
   jdr_composite_model,
-  data = processed,
+  data = data,
   estimator = "MLR",
   std.lv = TRUE,
   missing = 'fiml'
@@ -608,7 +612,7 @@ resources_factor =   '
   opp =~ opp_1 + opp_2 + opp_3
   mng =~ mng_1 + mng_2 
   inf =~ inf_1 + inf_2 + inf_3 + inf_4 + inf_5 + inf_6
-  soc =~ soc_1 + soc_2 + soc_3 + soc_4 + soc_5 + soc_6
+  soc =~ scc_1 + scc_2 + scc_3 + scs_1 + scs_2 + scs_3
   sec =~ sec_1 + sec_2 + sec_3 + sec_4
 
   # Job Resources
@@ -729,13 +733,13 @@ AVE2_raw(jdr_demands_fit, "job_demands")
 ### Outlier detection
 
 ```{r}
-cooks_d <- genCookDist(jdr_measurement_fit_test, data = processed, check.lv.names = FALSE)
+cooks_d <- genCookDist(jdr_measurement_fit, data = processed, check.lv.names = FALSE)
 
 outlier_df <- processed %>%
   mutate(
     id = seq_len(nrow(.)),
     cooks_d = cooks_d,
-    is_outlier_cooks = cooks_d > 10   # or 0.5 depending on preference
+    is_outlier_cooks = cooks_d > 10   
   )
 
 plot(outlier_df$cooks_d, type = "h", main = "Cook's Distance", ylab = "Cook's Distance", ylim = c(0, 50))
