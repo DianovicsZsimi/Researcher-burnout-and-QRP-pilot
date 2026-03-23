@@ -529,12 +529,12 @@ jdr_measurement_model_test <- '
   
   # Allowing latent factors to correlate
   job_demands ~~ job_resources
-
-  # Allowing theoretically related indicators and factors to correlate
+  
+  #
   rla_5 ~~ rla_6
 '
 
-jdr_measurement_fit_test <- sem(
+jdr_measurement_fit <- sem(
   jdr_measurement_model_test,
   data = processed,
   estimator = "WLSMV",
@@ -553,9 +553,9 @@ jdr_measurement_fit <- sem(
 )
 
 summary(jdr_measurement_fit, fit.measures = TRUE, standardized = TRUE)
-lavInspect(jdr_measurement_fit_test, "cov.lv")
+lavInspect(jdr_measurement_fit, "cov.lv")
 
-modificationIndices(jdr_measurement_fit_test, sort. = TRUE, maximum.number = 10)
+modificationIndices(jdr_measurement_fit, sort. = TRUE, maximum.number = 10)
 ```
 
 ### Composite SEM
@@ -773,14 +773,17 @@ anova(jdr_measurement_fit_test, fit_no_outlier)
 ```{r}
 pwrsem_loadings = standardizedSolution(jdr_measurement_fit) %>%
   dplyr::filter(op == "=~") %>%
-  dplyr::select(lhs, rhs, est.std)
+  dplyr::select(lhs, rhs, est.std) %>% 
+  mutate(est.std = round(est.std, 2))
 
 pwrsem_reg_coefs <- standardizedSolution(jdr_measurement_fit) |>
-  subset(op == "~", select = c("lhs","rhs","est.std"))
+  subset(op == "~", select = c("lhs","rhs","est.std")) %>% 
+  mutate(est.std = round(est.std, 2))
 
 pe <- parameterEstimates(jdr_measurement_fit)
 pwrsem_res_variances <- pe %>%
-  dplyr::select(rhs ,est)
+  dplyr::select(rhs ,est) %>% 
+  mutate(est = round(est, 2))
 
 
 write.csv(pwrsem_loadings, here::here("data/processed/pwrsem_loadings.csv"))
@@ -788,7 +791,7 @@ write.csv(pwrsem_reg_coefs, here::here("data/processed/pwrsem_reg_coefs.csv"))
 write.csv(pwrsem_res_variances, here::here("data/processed/pwrsem_res_variances.csv"))
 ```
 
-### Power analysis for global fit
+### Power analysis for local fit
 
 ```{r}
 population_model <- fitted(jdr_measurement_fit)$cov
@@ -819,8 +822,6 @@ hypothethised_model_structure_dem <- '
   # Allowing latent factors to correlate
   job_demands ~~ job_resources
 
-  # Allowing theoretically related indicators and factors to correlate
-  rla_5 ~~ rla_6
 '
 
 build_H0 <- function(beta_dem, Sigma_H1) {
@@ -895,8 +896,6 @@ hypothethised_model_structure_res <- '
   # Allowing latent factors to correlate
   job_demands ~~ job_resources
 
-  # Allowing theoretically related indicators and factors to correlate
-  rla_5 ~~ rla_6
 '
 
 build_H0 <- function(beta_res, Sigma_H1) {
@@ -1018,9 +1017,6 @@ get_df_model = '
   
   # Allowing latent factors to correlate
   job_demands ~~ job_resources
-
-  # Allowing theoretically related indicators and factors to correlate
-  rla_5 ~~ rla_6
   '
 
 test_fit = cfa(
@@ -1033,5 +1029,6 @@ test_fit = cfa(
 )
 
 summary(test_fit)
+
 ```
 
