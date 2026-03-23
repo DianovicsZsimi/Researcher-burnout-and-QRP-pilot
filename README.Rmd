@@ -74,4 +74,5 @@ installr::install.Rtools()
 I. raw_to_clean_data.qmd
 II. clean_to_processed_data.qmd 
 III. processed_to_aggregated_data.qmd 
+IV. diagnostics.qmd
 IV. descriptive_analysis.qmd
