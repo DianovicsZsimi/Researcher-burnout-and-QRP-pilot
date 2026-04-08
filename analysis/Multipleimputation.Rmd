@@ -1,0 +1,489 @@
+---
+title: "Burnout"
+author: "Mahmoud Elsherif"
+date: "2026-03-29"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+## Setup for both analyses
+
+Load packages:
+
+```{r message = FALSE, warning = FALSE}
+
+library(mice) # : Stands for Multivariate Imputation by Chained Equations. It is used to fill in (impute) missing data
+library(rjags) #Interface to the JAGS MCMC software. It allows you to run Bayesian models, which is useful for the JointAI package.)
+library(JointAI) #Used for Joint Analysis and Imputation. it performs Bayesian analysis of models (like linear mixed models) when you have missing data.
+library(VIM) #Used for the Visualization and Imputation of Missing Values. It helps you see where data is missing in your dataset
+library(naniar) #A modern Tidyverse-friendly package for visualizing and handling missing data. It does not provide Variance Inflation Factors (VIF)
+library(e1071) # Calculate skewness/kurtosis.
+library(ordinal) # For logistic regression
+library(ggpubr) #To make graphs on multiple panels
+library(reshape2)#package for tidyverse
+library(rlang) # package for tidyverse
+library(broom) #provide tidy model outputs
+library(afex) #for p-values
+library(viridis)#for colourblind friendly images
+library(gt) #for tables
+library(tidyverse)
+
+library(here)
+data_path <- here("data")
+```
+
+Load data:
+
+```{r message = FALSE, warning = FALSE}
+# Compound data:
+
+data = read_csv(here::here("data/processed/aggregated_data.csv"))
+```
+
+Converts strings and ordinal into numbers
+
+```{r setup, include = FALSE}
+
+data <- data %>%
+  mutate(title_num = case_when(
+    title == "PhD student" ~ 1,
+    title == "Post Doc" ~ 2,
+    title == "Assistant Professor" ~ 3,
+    title == "Associate Professor" ~ 4,
+    title == "Full Professor" ~ 5,
+    TRUE ~ 0  # Covers "This does not apply to me" or any others
+  ))
+
+data <- data %>%
+  mutate(gender_num = case_when(
+    gender == "Man" ~ 1,
+    gender == "Woman" ~ 2,
+    gender == "Non-binary / third gender" ~ 3,
+    gender == "Prefer not to say" ~ 4,
+    TRUE ~ NA_real_
+  ))
+
+data <- data %>%
+  mutate(discipline_num = case_when(
+    discipline == "Non-STEM" ~ 0,
+    discipline == "STEM (science, technology, engineering, mathematics)" ~ 1, # Make sure the text matches exactly
+    TRUE ~ NA_real_
+  ))
+
+data <- data %>%
+  mutate(last_published_num = case_when(
+    last_published == "This year" ~ 1,
+    last_published == "In the last year" ~ 2,
+    last_published == "In the last 5 years" ~ 3,
+    last_published == "In the last 10 years" ~ 4,
+    TRUE ~ NA_real_
+  ))
+
+data <- data %>%
+  mutate(academia_length_num = case_when(
+    academia_length == "Less than 1 year" ~ 1,
+    academia_length == "1-5 years" ~ 2,
+    academia_length == "6-10 years" ~ 3,
+    academia_length == "More than 10 years" ~ 4,
+    TRUE ~ NA_real_
+  ))
+
+data <- data %>%
+  mutate(phd_dissertation_num = case_when(
+    phd_dissertation == "1-2 articles" ~ 1,
+    phd_dissertation == "3-4 articles" ~ 2,
+    phd_dissertation == "More than 4 articles" ~ 3,
+    TRUE ~ 0  # Catch-all for NA and "I don't know"
+  ))
+
+data <- data %>%
+  select(#-gender, 
+         #-title, 
+         #-discipline, 
+         #-last_published, 
+         #-academia_length, 
+         #-phd_dissertation, 
+         -anonym_id)
+
+```
+
+# Assessing missingness in the data ---------------------------------------
+
+```{r setup, include=FALSE}
+
+# Replace "NA" with proper NA in all columns
+data <- data %>%
+  mutate(across(where(is.character), ~na_if(., "NA")))
+
+data %>% select(where(is.character)) %>% colnames()
+
+#Assess the missing data patterns
+mcar_test(data %>%  select(brt_1:gnl_2)
+)
+
+#The pattern is significant, meaning the data is not completely missing at random, thus we will need to use multiple imputation
+
+  ## Missing data patterns
+  summary(data)
+  md.pattern(data, rotate.names = TRUE)
+
+  # Visual inspection of missing data patterns on item level
+  # Plotting the variables
+  
+  par(mar = c(2,3,2,1), mgp = c(2, 0.6, 0))
+  
+  
+plot_data <- data %>%
+  select(brt_1:gnl_2) %>%
+  # This 'unclasses' the columns to ensure they only have ONE class (numeric)
+  mutate(across(everything(), ~as.numeric(as.character(.))))
+
+final_plot_data <- plot_data %>%
+  as.matrix() %>%      # Converting to matrix strips all 'attributes' and extra classes
+  as.data.frame()      # Converting back makes it a clean data frame again
+
+# Plot just the 'brt' scale
+plot_all(final_plot_data %>% select(starts_with("brt")), nclass = 10)
+
+# Plot just the 'pps' scale
+plot_all(final_plot_data %>% select(starts_with("pps")), nclass = 10)
+
+plot_all(final_plot_data %>% select(starts_with("ppa")), nclass = 10)
+
+plot_all(final_plot_data %>% select(starts_with("ppr")), nclass = 10)
+
+plot_all(final_plot_data %>% select(starts_with("sec")), nclass = 10)
+
+plot_all(final_plot_data %>% select(starts_with("wlb")), nclass = 10)
+
+
+plot_all(final_plot_data %>% select(starts_with("wld")), nclass = 10)
+
+plot_all(final_plot_data %>% select(starts_with("scs")), nclass = 10)
+
+plot_all(final_plot_data %>% select(starts_with("scc")), nclass = 10)
+
+plot_all(final_plot_data %>% select(starts_with("sec")), nclass = 10)
+
+plot_all(final_plot_data %>% select(starts_with("opp")), nclass = 10)
+
+plot_all(final_plot_data %>% select(starts_with("qrp")), nclass = 10)
+
+plot_all(final_plot_data %>% select(starts_with("inf")), nclass = 10)
+
+plot_all(final_plot_data %>% select(starts_with("mng")), nclass = 10)
+
+plot_all(final_plot_data %>% select(starts_with("rla")), nclass = 10)
+
+plot_all(final_plot_data %>% select(starts_with("rlc")), nclass = 10)
+
+plot_all(final_plot_data %>% select(starts_with("pay")), nclass = 10)
+
+plot_all(final_plot_data %>% select(starts_with("tol")), nclass = 10)
+
+plot_all(final_plot_data %>% select(starts_with("gnl")), nclass = 10)
+
+  aggr_plot <- aggr(final_plot_data, col=c('navyblue','red'),
+                  numbers=TRUE, sortVars=TRUE, 
+                  labels=TRUE, cex.axis=.5, gap=2, 
+                  ylab=c("Histogram of missing data","Pattern"))
+ 
+  vis_miss(final_plot_data, sort_miss = TRUE)
+  gg_miss_upset(final_plot_data, nsets = n_var_miss(final_plot_data), nintersects = NA)
+  gg_miss_case(final_plot_data)
+  gg_miss_case_cumsum(final_plot_data)
+  gg_miss_var_cumsum(final_plot_data) + labs(x = "Variable", y = "Cumulative sum of missing values")
+  
+  # Mean,  sd, skewness and kurtosis of variables
+  
+# Summary table for all survey items
+summary_table <- final_plot_data %>%
+  summarise(across(brt_1:gnl_2, 
+                   list(mean = ~mean(., na.rm=TRUE), 
+                        sd   = ~sd(., na.rm=TRUE),
+                        skew = ~e1071::skewness(., na.rm=TRUE, type = 2),
+                        kurt = ~e1071::kurtosis(., na.rm=TRUE, type = 2))))
+
+
+
+
+DATA_1 <- data %>%
+  mutate(across(
+    brt_1:gnl_2,
+    ~ ifelse(is.na(.), 1, 0),
+    .names = "{.col}_dum"
+  ))
+
+
+
+```
+
+# Correlations for continuous auxiliary variables
+
+```{r setup, include=FALSE}
+  
+  # 1. Define your dummy variables and your predictors
+
+# This gets all the 0/1 dummy columns you created
+dummies <- names(DATA_1 %>% select(ends_with("_dum")
+                                   )
+                 )
+
+# This gets all the original numeric columns
+predictors <- names(DATA_1 %>% select(brt_1:gnl_2)
+                    )
+                                      
+# 2. Run the correlation matrix for just these groups
+cor_matrix <- cor(DATA_1[dummies], DATA_1[predictors], use = "pairwise.complete.obs")
+
+
+# 1. Identify which dummy variables actually have missing data 
+# (where the sum of the dummy is > 0)
+active_dummies <- DATA_1 %>%
+  select(ends_with("_dum")) %>%
+  select(where(~ sum(.) > 0)) %>%
+  names()
+
+# 2. Run the correlation ONLY for those that have missing values
+# This stops the "Standard Deviation is Zero" warning
+cor_matrix <- cor(DATA_1[active_dummies], DATA_1[predictors], use = "pairwise.complete.obs")
+
+# 3. View the result
+round(cor_matrix, 2)
+
+# 3. View it as a nice table
+round(cor_matrix, 2) %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("Variable") %>%
+  gt()
+
+#When you look at this matrix, you are looking for the "Missingness Mechanism":MCAR (Missing Completely at Random): 
+#All correlations are near zero. The missingness is just "bad luck" and doesn't depend on your data.
+#MAR (Missing at Random): You see significant correlations (e.g., r = .15 ). This means people with higher rla4 were more likely to miss sec_1_dum. This is good to know because you can use those predictors in your mice imputation to fix the bias.
+#MNAR (Missing Not at Random): The most difficult type. This happens if the reason for missingness is the variable itself (e.g., people with low VAR1 scores specifically chose not to do VAR2).
+
+```
+
+The correlation matrix between missingness indicators (dummies) and observed scores showed no substantial systematic patterns (r \< .30 for all pairs), supporting the assumption that data are Missing Completely at Random (MCAR)
+
+# Fisher exact test for binary auxiliary variables
+
+```{r setup, include=FALSE}
+
+# 1. Define your lists
+dummies <- names(DATA_1 %>% select(ends_with("_dum")
+                                   )
+)
+categories <- c("gender",	"title",	"discipline",	"last_published",	"academia_length",	"phd_dissertation")
+
+# 2. Use a nested loop to create a dataframe of results
+# Ensure demographic categories are treated as factors for testing
+DATA_CLEAN <- DATA_1 %>%
+  mutate(across(c("gender", "title", "discipline", "last_published", "academia_length", "phd_dissertation"), as.factor))
+
+# 1. Identify only those dummies that actually HAVE missing values
+active_dummies <- names(DATA_CLEAN %>% 
+                          select(ends_with("_dum")) %>% 
+                          select(where(~ sum(.) > 0)))
+
+# 2. Run the loop with an extra-safe level check
+results <- expand.grid(Dummy = active_dummies, Category = categories) %>%
+  rowwise() %>%
+  mutate(p_value = {
+    # Extract data and remove rows where either is NA
+    valid_data <- data.frame(d = DATA_CLEAN[[Dummy]], c = DATA_CLEAN[[Category]]) %>%
+      na.omit()
+    
+    # Check if we still have at least 2 levels in BOTH columns after dropping NAs
+    if(length(unique(valid_data$d)) > 1 && length(unique(valid_data$c)) > 1) {
+      # Use the cleaned, paired data
+      fisher.test(valid_data$d, valid_data$c, simulate.p.value = TRUE, B = 10000)$p.value
+    } else {
+      NA_real_
+    }
+  }) %>%
+  ungroup()
+
+# 3. View significant results
+significant_results <- results %>% filter(p_value < 0.05)
+print(significant_results)
+#By running these tests, you are checking if missingness is dependent on categorical factors. Example: If gender  have a significant p-value, it means the Treatment group and Control group have different rates of missing data.Action Item: If you find significance here, you must include these categorical variables as "auxiliary variables" when you eventually run your mice imputation. This informs the model why the data is missing and helps it make better "guesses" for the missing values. 
+
+#The missingness in the research practice items (brt_3, brt_4, qrp_6-8) is not "random noise." Instead, it is systematically related to professional demographics—specifically Job Title and Length of Time in Academia.
+
+# 1. Define your lists based on your actual data
+# 'dummies' are your DVs (The "Is it missing?" flags)
+dummies <- names(DATA_CLEAN %>% select(ends_with("_dum")))
+
+# 'aux_vars' are your IVs (The demographics/factors)
+aux_vars <- c("gender", "title", "discipline", "last_published", "academia_length")
+
+# 2. Run all models at once
+logistic_results <- expand.grid(dv = dummies, iv = aux_vars) %>%
+  group_by(dv, iv) %>%
+  do({
+    # We use the current dv and iv from the row to build the formula
+    current_dv <- .$dv
+    current_iv <- .$iv
+    
+    # Ensure data is passed correctly here
+    tidy(glm(as.formula(paste(current_dv, "~", current_iv)), 
+             family = "binomial", 
+             data = DATA_CLEAN), # <--- FIX: Added your dataset name here
+         exponentiate = TRUE)
+  }) %>% 
+  filter(term != "(Intercept)") %>%
+  ungroup()
+
+view(logistic_results)
+
+# Filter for significant predictors of missingness
+significant_logistic <- logistic_results %>% filter(p.value < 0.05)
+print("Significant Logistic Predictors:")
+print(significant_logistic)
+
+#If you don't use Multiple Imputation, your "average" score for brt_3, brt4, qrp_6, qrp_7, qrp_8 or qrp_6 will be heavily skewed toward the opinions of senior academics. By including academia_length in your mice model, the algorithm will "fill in" those missing values using the known profiles of other junior researchers, effectively restoring the voice of the newer cohort to your dataset.
+
+```
+
+## Associations with observed values
+
+```{r}
+# 1. Define your variable groups
+predictors <- names(DATA_1 %>% select(brt_1:gnl_2))
+
+aux_vars <- c("gender_num",	"title_num",	"discipline_num",	"last_published_num",	"academia_length_num",	"phd_dissertation_num")
+
+# 2. Generate the full matrix at once
+# use = "pairwise.complete.obs" is better than "complete.obs" 
+# because it keeps more data for each specific pair.
+full_cor_matrix <- cor(DATA_1[predictors], DATA_1[aux_vars], 
+                       use = "pairwise.complete.obs")
+
+# 3. View the results rounded to 2 decimal places
+round(full_cor_matrix, 2)
+
+# 4. View the results in a table
+round(full_cor_matrix, 2) %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("Variable") %>%
+  gt()
+
+```
+
+# One-way ANOVA for dichotomous and categorical auxiliary variables 
+
+```{r}
+# 1. Define your groups
+dvs <- predictors
+
+ivs <- aux_vars
+
+# 2. Map the ANOVA function across all pairs
+# 2. Map the Linear Regression function across all pairs
+regression_results <- expand.grid(dv = dvs, iv = ivs) %>%
+  group_by(dv, iv) %>%
+  do({
+    # Run the linear model
+    fit <- lm(as.formula(paste(.$dv, "~", .$iv)), data = DATA_CLEAN)
+    
+    # Tidy the output to get coefficients and p-values
+    tidy(fit) %>% 
+      filter(term != "(Intercept)")
+  }) %>%
+  ungroup()
+
+# 3. Filter for significant predictors
+significant_regressions <- regression_results %>% filter(p.value < 0.05)
+print(significant_regressions)
+```
+
+# Performing multiple imputation ------------------------------------------
+
+```{r}
+
+# 1. Prepare the data: Use the numeric versions of demographics
+# This avoids the "sparse category" problem in Random Forest
+MI_DATA <- DATA_CLEAN %>%
+  select(brt_1:gnl_2, gender_num, title_num, discipline_num, 
+         last_published_num, academia_length_num, phd_dissertation_num)
+
+# 2. Initialize mice
+init <- mice(MI_DATA, maxit = 0)
+pred <- init$predictorMatrix
+meth <- init$method
+
+# 3. Set a clean Predictor Matrix
+pred[,] <- 0
+survey_items <- names(MI_DATA %>% select(brt_1:gnl_2))
+numeric_aux <- names(MI_DATA %>% select(ends_with("_num")))
+
+# Demographics predict Survey Items
+pred[survey_items, numeric_aux] <- 1
+
+# 4. Handle "Orphaned" Auxiliary Variables
+# If an auxiliary variable (like phd_dissertation_num) has NAs, 
+# it needs a predictor too.
+for (aux in numeric_aux) {
+    # Let title and academia_length predict other demographics
+    pred[aux, c("title_num", "academia_length_num")] <- 1
+}
+
+# 5. Final Cleanup
+diag(pred) <- 0
+meth[survey_items] <- "rf"
+meth[numeric_aux] <- "pmm" # Use Predictive Mean Matching for numeric codes
+
+# 6. Run Imputation
+imp_final <- mice(MI_DATA, 
+                  method = meth, 
+                  predictorMatrix = pred, 
+                  m = 20, 
+                  maxit = 10, 
+                  seed = 2026)
+
+# If this is 0, your model is perfectly healthy!
+nrow(imp_final$loggedEvents)
+
+# If it's NOT 0, look at the reasons:
+print(imp_final$loggedEvents)
+```
+
+# Evaluating multiple imputation ---------------------------------------------------
+
+```{r}
+
+# 1. Plot convergence (the "hairy caterpillars")
+plot(imp_final)
+
+# 2. Density plots: Check if imputed values (red) follow the distribution of observed values (blue)
+densityplot(imp_final)
+
+# 3. Stripplot: Check for outliers in the imputed data
+stripplot(imp_final, pch = 20, cex = 1.2)
+
+# Extract all imputed datasets
+# action="long" stacks them; include=FALSE removes the original data with NAs
+imp_data_long <- complete(imp_final, action = "long", include = FALSE)
+
+# Save to CSV
+write.csv(imp_data_long, "Survey_Imputed_Data_Long.csv", row.names = FALSE)
+
+# Calculate Mean and SD for every survey item across all imputations
+pooled_summary <- imp_data_long %>%
+  # Group by the imputation number (.imp) and any categories if needed
+  group_by(.imp) %>%
+  summarise(across(brt_1:gnl_2, list(mean = ~mean(., na.rm=TRUE), sd = ~sd(., na.rm=TRUE)))) %>%
+  # Now average those means/sds across all  imputations
+  pivot_longer(cols = - .imp, names_to = "variable_stat", values_to = "value") %>%
+  separate(variable_stat, into = c("variable", "stat"), sep = "_(?=[^_]+$)") %>%
+  group_by(variable, stat) %>%
+  summarise(pooled_value = mean(value)) %>%
+  pivot_wider(names_from = stat, values_from = pooled_value)
+
+# View your final pooled table
+print(pooled_summary)
+write.csv(pooled_summary, "Pooled_Descriptive_Statistics.csv")
+
+```
