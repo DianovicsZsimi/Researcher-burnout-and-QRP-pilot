@@ -654,9 +654,9 @@ survey_data = burnout_data %>%
 ```
 
 ```{r}
-validity_cols <- grep("valid", names(survey_data), value = TRUE)
+validity_cols = grep("valid", names(survey_data), value = TRUE)
 
-survey_data <- survey_data %>%
+survey_data = survey_data %>%
   rowwise() %>%
   mutate(
     overall_validity = if_else(
@@ -667,7 +667,7 @@ survey_data <- survey_data %>%
   ) %>%
   ungroup()
 
-survey_data_clean <- survey_data %>%
+survey_data_clean = survey_data %>%
   filter(overall_validity == "valid") %>% 
   select(-contains("valid"))
 ```
