@@ -12,7 +12,7 @@ format: html
 ```{r echo=FALSE, output=FALSE}
 library(tidyverse)
 library(here)
-data_path <- here("data")
+data_path = here("data")
 ```
 
 ### Importing data
@@ -27,7 +27,7 @@ if (identical(names(raw_data_01), names(raw_data_02))) {
   cat("The column names are different.\n")
 }
 
-raw_data = raw_data_01 |> 
+raw_data = raw_data_01 %>%  
   bind_rows(raw_data_02) %>% 
   dplyr::select(-open_time)
 ```
@@ -35,7 +35,7 @@ raw_data = raw_data_01 |>
 ### Filtering out irrelevant data for analysis
 
 ```{r}
-raw_data_filtered = raw_data |> 
+raw_data_filtered = raw_data %>%  
   dplyr::select(-StartDate, 
          -EndDate,
          -Status,
@@ -46,7 +46,7 @@ raw_data_filtered = raw_data |>
          -UserLanguage,
          -DistributionChannel)
 
-meta_data = raw_data |> 
+meta_data = raw_data %>%  
   dplyr::select(StartDate, 
          EndDate,
          Status,
@@ -62,7 +62,7 @@ meta_data = raw_data |>
 
 ```{r}
 codebook = raw_data_filtered[1, , drop = FALSE]
-codebook = codebook |> 
+codebook = codebook %>%  
   pivot_longer(everything(), names_to = "variable", values_to = "description") %>% 
   separate(
     col = description,
@@ -74,8 +74,8 @@ codebook = codebook |>
 ### Unifying syntax
 
 ```{r}
-raw_data_unified = raw_data_filtered |> 
-  rename_with(tolower) |> 
+raw_data_unified = raw_data_filtered %>%  
+  rename_with(tolower) %>%  
   slice(-c(1, 2))
 ```
 
@@ -110,20 +110,20 @@ raw_data_anonymized = raw_data_valid %>%
 ### Locate attention check questions
 
 ```{r}
-#For copsoq_wokload_5, "Rarely" is the correct answer
-#For attention_2, "Strongly agree" is the correct answer
+# For copsoq_wokload_5, "Rarely" is the correct answer
+# For attention_2, "Strongly agree" is the correct answer
 
-raw_data_attention = raw_data_anonymized |> 
-  rename(attention_1 = copsoq_workload_5) |>
+raw_data_attention = raw_data_anonymized %>%  
+  rename(attention_1 = copsoq_workload_5) %>% 
   dplyr::select(attention_1, attention_2, anonym_id)
 
-attention_check = raw_data_attention |> 
+attention_check = raw_data_attention %>%  
   mutate(attention_1 = if_else(attention_1 == "Rarely", 1, 0),
-         attention_2 = if_else(attention_2 == "Strongly agree", 1, 0)) |> 
-  mutate(attention = ifelse(attention_1 == 0 & attention_2 == 0, "Failed", "Passed")) |> 
+         attention_2 = if_else(attention_2 == "Strongly agree", 1, 0)) %>%  
+  mutate(attention = ifelse(attention_1 == 0 & attention_2 == 0, "Failed", "Passed")) %>%  
   dplyr::select(attention, anonym_id)
 
-raw_data_valid = raw_data_anonymized |> 
+raw_data_valid = raw_data_anonymized %>%  
   left_join(attention_check, by = "anonym_id") %>% 
   filter(attention != "Failed") %>% 
   dplyr::select(-copsoq_workload_5, -attention_2, -attention)
